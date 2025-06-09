@@ -29,6 +29,7 @@ classifiers = [
 ]
 dependencies = [
   "dask[complete]",
+  "xarray[complete]",
 ]
 
 [project.optional-dependencies]
