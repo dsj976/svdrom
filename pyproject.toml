@@ -77,6 +77,7 @@ strict = false
 [[tool.mypy.overrides]]
 module = [
   "dask.distributed.*",
+  "xarray.*",
 ]
 ignore_missing_imports = true
 
