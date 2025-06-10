@@ -1,5 +1,9 @@
 import xarray as xr
 
+from svdrom.logger import setup_logger
+
+logger = setup_logger("I/O", "io.log")
+
 
 class DataHandler:
     def open_dataset(self, filename: str, chunks: str | dict | int = "auto"):
@@ -23,9 +27,11 @@ class DataHandler:
         The opened DataSet is assigned to the `ds` attribute of the instance.
         """
         try:
+            logger.info("Opening Xarray.DataSet from %s.", filename)
             self.ds = xr.open_dataset(filename, chunks=chunks)
         except Exception as e:
             msg = f"Error opening {filename} as Xarray.DataSet."
+            logger.exception(msg)
             raise RuntimeError(msg) from e
 
     def open_dataarray(self, filename: str, chunks: str | dict | int = "auto"):
@@ -49,7 +55,9 @@ class DataHandler:
         The opened DataArray is assigned to the `da` attribute of the instance.
         """
         try:
+            logger.info("Opening Xarray.DataArray from %s.", filename)
             self.da = xr.open_dataarray(filename, chunks=chunks)
         except Exception as e:
             msg = f"Error opening {filename} as Xarray.DataArray."
+            logger.exception(msg)
             raise RuntimeError(msg) from e
