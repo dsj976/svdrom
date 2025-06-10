@@ -8,10 +8,6 @@ A Python package for SVD-based reduced order modeling of large datasets, directl
 
 ## Installation
 
-```bash
-python -m pip install svdrom
-```
-
 From source:
 ```bash
 git clone https://github.com/dsj976/svdrom
