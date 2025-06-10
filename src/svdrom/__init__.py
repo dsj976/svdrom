@@ -1,5 +1,6 @@
 """
-svdrom: A Python package for SVD-based reduced order modeling of large datasets, directly on your laptop.
+svdrom: A Python package for SVD-based reduced order modeling of large datasets,
+directly on your laptop.
 """
 
 from __future__ import annotations
