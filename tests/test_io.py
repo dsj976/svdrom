@@ -77,6 +77,13 @@ class TestDataHandler:
                 lambda ds, path: ds.to_netcdf(path, format="NETCDF4"),
                 lambda da, path: da.to_netcdf(path, format="NETCDF4"),
             ),
+            (
+                "h5",
+                "dataset.h5",
+                "dataarray.h5",
+                lambda ds, path: ds.to_netcdf(path, engine="h5netcdf"),
+                lambda da, path: da.to_netcdf(path, engine="h5netcdf"),
+            ),
         ],
     )
     def test_open_formats(self, filetype, ds_ext, da_ext, ds_save, da_save):
