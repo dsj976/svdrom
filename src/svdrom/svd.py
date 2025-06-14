@@ -40,8 +40,8 @@ class ExactSVD(SVD):
             u, s, v = da.linalg.svd(self.X)
             u, s, v = persist(u, s, v)
             self.u = u[:, :n_components]
+            self.v = v[:n_components, :]
             self.s = s[:n_components].compute()
-            self.v = v[:n_components, :].compute()
             logger.info("Finished fitting exact SVD.")
         except Exception as e:
             msg = "Failed fitting exact SVD."
