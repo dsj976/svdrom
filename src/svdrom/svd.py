@@ -1,3 +1,5 @@
+from abc import ABC, abstractmethod
+
 import dask.array as da
 from dask import persist
 from dask_ml.decomposition import TruncatedSVD as TSVD
@@ -7,7 +9,7 @@ from svdrom.logger import setup_logger
 logger = setup_logger("SVD", "svd.log")
 
 
-class SVD:
+class SVD(ABC):
     def __init__(self, X: da.Array) -> None:
         if not isinstance(X, da.Array):
             msg = "The input array must be a dask.array.Array."
@@ -22,6 +24,10 @@ class SVD:
     def rechunk(self, chunk_cols=False):
         if not chunk_cols:
             self.X = self.X.rechunk({0: "auto", 1: -1})
+
+    @abstractmethod
+    def fit(self, n_components: int):
+        pass
 
 
 class ExactSVD(SVD):
