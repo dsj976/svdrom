@@ -14,6 +14,31 @@ from svdrom.svd import ExactSVD, RandomizedSVD
     ],
 )
 class TestSVD:
+    """
+    Test suite for validating the functionality of SVD
+    (Singular Value Decomposition) implementations.
+
+    This class provides methods to test SVD algorithms using
+    Dask arrays. It checks for correct output types, shapes,
+    and expected exceptions for different matrix types
+    (tall-and-skinny, short-and-fat or square/nearly square).
+
+    Methods
+    -------
+    _make_matrix(n_rows, n_cols)
+        Helper method to create a random Dask array of the
+        specified shape with auto chunking.
+
+    test_exact_svd(matrix_type, n_rows, n_cols)
+        Tests the ExactSVD implementation.
+        Verifies correct exception handling, output types,
+        and shapes.
+
+    test_randomized_svd(matrix_type, n_rows, n_cols)
+        Tests the RandomizedSVD implementation.
+        Checks output types and shapes for correctness.
+    """
+
     def _make_matrix(self, n_rows, n_cols):
         self.X = da.random.random((n_rows, n_cols), chunks="auto").astype("float32")
 
