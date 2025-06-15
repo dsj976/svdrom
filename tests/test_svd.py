@@ -2,7 +2,7 @@ import dask.array as da
 import numpy as np
 import pytest
 
-from svdrom.svd import ExactSVD
+from svdrom.svd import ExactSVD, TruncatedSVD
 
 
 class TestSVD:
@@ -49,3 +49,46 @@ class TestSVD:
             assert exact_svd.s.shape == (
                 n_components,
             ), "The s vector should have shape (n_components,)."
+
+    @pytest.mark.parametrize(
+        ("matrix_type", "n_rows", "n_cols"),
+        [
+            ("tall-and-skinny", 10_000, 100),
+            ("short-and-fat", 100, 10_000),
+            ("square", 1_000, 1_000),
+        ],
+    )
+    def test_truncated_svd(self, matrix_type, n_rows, n_cols):
+        self._make_matrix(n_rows, n_cols)
+        n_components = 10
+
+        if matrix_type == "square":
+            with pytest.raises(
+                RuntimeError, match="truncated SVD algorithm can only handle"
+            ):
+                TruncatedSVD(self.X)
+        else:
+            truncated_svd = TruncatedSVD(self.X)
+            truncated_svd.fit(n_components=n_components)
+
+            assert hasattr(truncated_svd, "u")
+            assert hasattr(truncated_svd, "s")
+            assert hasattr(truncated_svd, "v")
+
+            u, s, v = truncated_svd.u, truncated_svd.s, truncated_svd.v
+
+            assert isinstance(u, da.Array)
+            assert isinstance(s, np.ndarray)
+            assert isinstance(v, da.Array)
+
+            assert u.shape == (n_rows, n_components)
+            assert s.shape == (n_components,)
+            assert v.shape == (n_components, n_cols)
+
+            # check ortho
+            identity_k = np.eye(n_components, dtype=np.float32)
+            u_ortho = (u.T @ u).compute()
+            v_ortho = (v @ v.T).compute()
+
+            assert np.allclose(u_ortho, identity_k, atol=1e-5)
+            assert np.allclose(v_ortho, identity_k, atol=1e-5)

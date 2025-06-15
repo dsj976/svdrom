@@ -75,6 +75,7 @@ disallow_untyped_defs = false
 disallow_incomplete_defs = false
 check_untyped_defs = true
 strict = false
+disable_error_code = ["import-untyped"]
 
 [tool.ruff]
 src = ["src"]

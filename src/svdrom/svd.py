@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 
 import dask.array as da
 from dask import persist
+from dask_ml.decomposition import TruncatedSVD as tsvd
 
 from svdrom.logger import setup_logger
 
@@ -78,9 +79,55 @@ class ExactSVD(SVD):
 class TruncatedSVD(SVD):
     def __init__(self, X):
         super().__init__(X)
+        if self.matrix_type == "square":
+            msg = (
+                "The truncated SVD algorithm can only handle tall-and-skinny "
+                "or short-and-fat matrices, i.e. the aspect ratio must be "
+                ">= 10. Try using the randomized SVD algorithm instead."
+            )
+            logger.exception(msg)
+            raise RuntimeError(msg)
 
-    def fit(self, n_components):
-        pass
+    def fit(self, n_components: int = 50):
+        logger.info("Fitting truncated SVD...")
+        decomposer = tsvd(n_components=n_components)
+
+        try:
+            if self.matrix_type == "tall-and-skinny":
+                logger.info("Using truncated SVD for tall-and-skinny matrix.")
+                X_transformed = decomposer.fit_transform(self.X)
+                s = decomposer.singular_values_
+                v_np = decomposer.components_
+                u = X_transformed / s  # unscaled
+
+                v = da.from_array(v_np, chunks=v_np.shape)
+
+            elif self.matrix_type == "short-and-fat":
+                logger.info(
+                    "Using *transposed* truncated SVD for short-and-fat matrix."
+                )
+                X_transformed_t = decomposer.fit_transform(self.X.T)
+                s = decomposer.singular_values_
+                v_t_np = decomposer.components_
+                u_t = X_transformed_t / s
+
+                u_np = v_t_np.T
+                v = u_t.T
+
+                u = da.from_array(u_np, chunks=u_np.shape)
+
+            u, s, v = persist(u, s, v)
+
+            self.u = u
+            self.v = v
+            self.s = s  # numpy array
+
+            logger.info("Finished fitting truncated SVD.")
+
+        except Exception as e:
+            msg = "Failed fitting truncated SVD."
+            logger.exception(msg)
+            raise RuntimeError(msg) from e
 
 
 class RandomizedSVD(SVD):
