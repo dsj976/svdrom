@@ -9,6 +9,35 @@ logger = setup_logger("SVD", "svd.log")
 
 
 class SVD(ABC):
+    """
+    Abstract base class for performing Singular Value Decomposition (SVD) on a
+    two-dimensional Dask array.
+
+    Parameters
+    ----------
+    X : da.Array
+        The input two-dimensional Dask array to decompose.
+
+    Attributes
+    ----------
+    X : da.Array
+        The input data matrix.
+    matrix_type : str
+        The type of the matrix based on its aspect ratio: "tall-and-skinny",
+        "short-and-fat" or "square".
+
+    Methods
+    -------
+    fit(n_components: int)
+        Abstract method to fit the SVD model to the input data, retaining
+        the specified number of components.
+
+    Raises
+    ------
+    ValueError
+        If the input array is not two-dimensional.
+    """
+
     def __init__(self, X: da.Array) -> None:
         if X.ndim != 2:
             msg = "The input array must be two-dimensional."
@@ -32,6 +61,44 @@ class SVD(ABC):
 
 
 class ExactSVD(SVD):
+    """
+    ExactSVD performs an exact Singular Value Decomposition (SVD)
+    on a Dask array.
+
+    This class inherits from the SVD base class and implements
+    the exact SVD algorithm for matrices that are either
+    tall-and-skinny or short-and-fat, with an aspect ratio >= 10.
+    It rechunks the input array as needed to optimize SVD
+    computation and raises an exception if the matrix is square,
+    recommending the use of randomized SVD instead.
+
+    Parameters
+    ----------
+    X : dask.array.Array
+        The input matrix to decompose.
+
+    Attributes
+    ----------
+    u : dask.array.Array
+        Left singular vectors, shape (n_samples, n_components).
+    s : numpy.ndarray
+        Singular values, shape (n_components,).
+    v : dask.array.Array
+        Right singular vectors, shape (n_components, n_features).
+
+    Methods
+    -------
+    fit(n_components)
+        Computes the exact SVD and stores the top `n_components`
+        left singular vectors (`u`), singular values (`s`),
+        and right singular vectors (`v`).
+
+    Raises
+    ------
+    RuntimeError
+        If the input matrix is square/nearly square or if SVD computation fails.
+    """
+
     def __init__(self, X):
         super().__init__(X)
         msg = (
