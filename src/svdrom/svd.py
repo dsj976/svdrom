@@ -151,6 +151,41 @@ class TruncatedSVD(SVD):
 
 
 class RandomizedSVD(SVD):
+    """
+    RandomizedSVD performs a truncated randomized Singular Value
+    Decomposition (SVD) on large matrices of any shape.
+
+    Upon initialization, the input array is rechunked if necessary to
+    optimize the computation based on its shape (tall-and-skinny or
+    short-and-fat). The fit method computes the truncated SVD using
+    Dask's `svd_compressed` function.
+
+    Parameters
+    ----------
+    X : dask.array.Array
+        The input data array to decompose.
+
+    Attributes
+    ----------
+    u : dask.array.Array
+        The left singular vectors of the input matrix.
+    s : numpy.ndarray
+        The singular values of the input matrix.
+    v : dask.array.Array
+        The right singular vectors of the input matrix.
+
+    Methods
+    -------
+    fit(n_components)
+        Computes the truncated randomized SVD with the specified
+        number of components.
+
+    Raises
+    ------
+    RuntimeError
+        If the randomized SVD computation fails.
+    """
+
     def __init__(self, X):
         super().__init__(X)
         msg = (
