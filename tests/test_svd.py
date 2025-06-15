@@ -23,8 +23,9 @@ class TestSVD:
             with pytest.raises(RuntimeError):
                 exact_svd = ExactSVD(self.X)
         else:
+            n_components = 10
             exact_svd = ExactSVD(self.X)
-            exact_svd.fit(n_components=10)
+            exact_svd.fit(n_components)
             assert isinstance(exact_svd.u, da.Array), (
                 "The u matrix should be of type dask.array.Array, "
                 f"not {type(exact_svd.u)}."
@@ -37,3 +38,14 @@ class TestSVD:
                 "The s vector should be of type numpy.ndarray, "
                 f"not {type(exact_svd.s)}."
             )
+            assert exact_svd.u.shape == (
+                n_rows,
+                n_components,
+            ), "The u matrix should have shape (n_rows, n_components)."
+            assert exact_svd.v.shape == (
+                n_components,
+                n_cols,
+            ), "The v matrix should have shape (n_components, n_cols)."
+            assert exact_svd.s.shape == (
+                n_components,
+            ), "The s vector should have shape (n_components,)."
