@@ -155,4 +155,16 @@ class RandomizedSVD(SVD):
         super().__init__(X)
 
     def fit(self, n_components):
-        pass
+        self.X = self.X.persist()
+        try:
+            logger.info("Fitting randomized SVD...")
+            u, s, v = da.linalg.svd_compressed(self.X, n_components)
+            u, s, v = persist(u, s, v)
+            self.u = u[:, :n_components]
+            self.v = v[:n_components, :]
+            self.s = s[:n_components].compute()
+            logger.info("Finished fitting randomized SVD.")
+        except Exception as e:
+            msg = "Failed fitting randomized SVD."
+            logger.exception(msg)
+            raise RuntimeError(msg) from e
