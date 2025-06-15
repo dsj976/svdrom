@@ -1,4 +1,5 @@
 import dask.array as da
+import numpy as np
 import pytest
 
 from svdrom.svd import ExactSVD
@@ -24,3 +25,15 @@ class TestSVD:
         else:
             exact_svd = ExactSVD(self.X)
             exact_svd.fit(n_components=10)
+            assert isinstance(exact_svd.u, da.Array), (
+                "The u matrix should be of type dask.array.Array, "
+                f"not {type(exact_svd.u)}."
+            )
+            assert isinstance(exact_svd.v, da.Array), (
+                "The v matrix should be of type dask.array.Array, "
+                f"not {type(exact_svd.v)}."
+            )
+            assert isinstance(exact_svd.s, np.ndarray), (
+                "The s vector should be of type numpy.ndarray, "
+                f"not {type(exact_svd.s)}."
+            )
