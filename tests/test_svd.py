@@ -41,11 +41,11 @@ class TestSVD:
             assert exact_svd.u.shape == (
                 n_rows,
                 n_components,
-            ), "The u matrix should have shape (n_rows, n_components)."
+            ), "The u matrix should have shape (n_samples, n_components)."
             assert exact_svd.v.shape == (
                 n_components,
                 n_cols,
-            ), "The v matrix should have shape (n_components, n_cols)."
+            ), "The v matrix should have shape (n_components, n_features)."
             assert exact_svd.s.shape == (
                 n_components,
             ), "The s vector should have shape (n_components,)."
