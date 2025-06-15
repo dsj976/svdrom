@@ -153,6 +153,22 @@ class TruncatedSVD(SVD):
 class RandomizedSVD(SVD):
     def __init__(self, X):
         super().__init__(X)
+        msg = (
+            "Rechunking the array before fitting the randomized SVD. "
+            "This might add some overhead."
+        )
+        if (
+            self.matrix_type == "tall-and-skinny"
+            and self.X.shape[1] != self.X.chunksize[1]
+        ):
+            logger.info(msg)
+            self.X = self.X.rechunk({0: "auto", 1: -1})
+        if (
+            self.matrix_type == "short-and-fat"
+            and self.X.shape[0] != self.X.chunksize[0]
+        ):
+            logger.info(msg)
+            self.X = self.X.rechunk({0: -1, 1: "auto"})
 
     def fit(self, n_components):
         self.X = self.X.persist()
