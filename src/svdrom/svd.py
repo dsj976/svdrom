@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 
 import dask.array as da
 from dask import persist
-from dask_ml.decomposition import TruncatedSVD as TSVD
 
 from svdrom.logger import setup_logger
 
@@ -11,19 +10,14 @@ logger = setup_logger("SVD", "svd.log")
 
 class SVD(ABC):
     def __init__(self, X: da.Array) -> None:
-        if not isinstance(X, da.Array):
-            msg = "The input array must be a dask.array.Array."
-            logger.exception(msg)
-            raise TypeError(msg)
         if X.ndim != 2:
             msg = "The input array must be two-dimensional."
             logger.exception(msg)
             raise ValueError(msg)
         self.X = X
 
-    def rechunk(self, chunk_cols=False):
-        if not chunk_cols:
-            self.X = self.X.rechunk({0: "auto", 1: -1})
+    def _rechunk(self, col_chunk_size: int = -1):
+        self.X = self.X.rechunk({0: "auto", 1: col_chunk_size}).persist()
 
     @abstractmethod
     def fit(self, n_components: int):
@@ -35,6 +29,14 @@ class ExactSVD(SVD):
         super().__init__(X)
 
     def fit(self, n_components):
+        if self.X.shape[1] != self.X.chunksize[1]:
+            msg = (
+                "Will need to rechunk the array before fitting the SVD. "
+                "This will add some overhead."
+            )
+            logger.info(msg)
+            self._rechunk()
+        self.X = self.X.persist()
         try:
             logger.info("Fitting exact SVD...")
             u, s, v = da.linalg.svd(self.X)
