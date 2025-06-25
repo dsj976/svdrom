@@ -144,13 +144,44 @@ class ExactSVD(SVD):
 
 
 class TruncatedSVD(SVD):
+    """
+    TruncatedSVD performs truncated Singular Value Decomposition (SVD)
+    on a tall-and-skinny matrix.
+
+    This class supports both tall-and-skinny and short-and-fat matrices,
+    but not square matrices. If the matrix is short-and-fat, it transposes
+    the matrix before fitting the truncated SVD. For square matrices,
+    consider using the randomized SVD algorithm instead.
+
+    Parameters
+    ----------
+    X : dask.array.Array
+        Input matrix to decompose.
+
+    Attributes
+    ----------
+    u : dask.array.Array
+        Left singular vectors.
+    v : dask.array.Array
+        Right singular vectors.
+    s : numpy.ndarray
+        Singular values.
+
+    Methods
+    -------
+    fit(n_components)
+        Compute the truncated SVD of the input matrix, keeping the
+        specified number of components.
+    """
+
     def __init__(self, X):
         super().__init__(X)
         if self.matrix_type == "square":
             msg = (
                 "The truncated SVD algorithm can only handle tall-and-skinny "
                 "or short-and-fat matrices. "
-                "Try using the randomized SVD algorithm instead."
+                "For square/nearly-square matrices, try using the randomized "
+                "SVD algorithm instead."
             )
             logger.exception(msg)
             raise RuntimeError(msg)
