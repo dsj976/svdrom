@@ -149,8 +149,8 @@ class TruncatedSVD(SVD):
         if self.matrix_type == "square":
             msg = (
                 "The truncated SVD algorithm can only handle tall-and-skinny "
-                "or short-and-fat matrices, i.e. the aspect ratio must be "
-                ">= 10. Try using the randomized SVD algorithm instead."
+                "or short-and-fat matrices. "
+                "Try using the randomized SVD algorithm instead."
             )
             logger.exception(msg)
             raise RuntimeError(msg)
@@ -176,7 +176,7 @@ class TruncatedSVD(SVD):
                 X_transformed_t = decomposer.fit_transform(self.X.T)
                 s = decomposer.singular_values_
                 v_t_np = decomposer.components_
-                u_t = X_transformed_t / s
+                u_t = X_transformed_t / s  # unscaled
 
                 u_np = v_t_np.T
                 v = u_t.T
