@@ -155,7 +155,7 @@ class TruncatedSVD(SVD):
             logger.exception(msg)
             raise RuntimeError(msg)
 
-    def fit(self, n_components: int = 50):
+    def fit(self, n_components: int):
         logger.info("Fitting truncated SVD...")
         decomposer = tsvd(n_components=n_components)
 
