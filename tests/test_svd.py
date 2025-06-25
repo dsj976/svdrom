@@ -2,22 +2,48 @@ import dask.array as da
 import numpy as np
 import pytest
 
-from svdrom.svd import ExactSVD, TruncatedSVD
+from svdrom.svd import ExactSVD, RandomizedSVD, TruncatedSVD
 
 
+@pytest.mark.parametrize(
+    ("matrix_type", "n_rows", "n_cols"),
+    [
+        ("tall-and-skinny", 100_000, 100),
+        ("short-and-fat", 100, 100_000),
+        ("square", 10_000, 5_000),
+    ],
+)
 class TestSVD:
-    def _make_matrix(self, n_rows, n_cols):
-        self.X = da.random.random((n_rows, n_cols)).astype("float32")
+    """
+    Test suite for validating the functionality of SVD
+    (Singular Value Decomposition) implementations.
 
-    @pytest.mark.parametrize(
-        ("matrix_type", "n_rows", "n_cols"),
-        [
-            ("tall-and-skinny", 10_000, 100),
-            ("short-and_fat", 100, 10_000),
-            ("square", 1_000, 1_000),
-        ],
-    )
+    This class provides methods to test SVD algorithms using
+    Dask arrays. It checks for correct output types, shapes,
+    and expected exceptions for different matrix types
+    (tall-and-skinny, short-and-fat or square/nearly square).
+
+    Methods
+    -------
+    _make_matrix(n_rows, n_cols)
+        Helper method to create a random Dask array of the
+        specified shape with auto chunking.
+
+    test_exact_svd(matrix_type, n_rows, n_cols)
+        Tests the ExactSVD implementation.
+        Verifies correct exception handling, output types,
+        and shapes.
+
+    test_randomized_svd(matrix_type, n_rows, n_cols)
+        Tests the RandomizedSVD implementation.
+        Checks output types and shapes for correctness.
+    """
+
+    def _make_matrix(self, n_rows, n_cols):
+        self.X = da.random.random((n_rows, n_cols), chunks="auto").astype("float32")
+
     def test_exact_svd(self, matrix_type, n_rows, n_cols):
+        print(f"Running exact SVD test for {matrix_type} matrix.")
         self._make_matrix(n_rows, n_cols)
         if matrix_type == "square":
             with pytest.raises(RuntimeError):
@@ -41,23 +67,45 @@ class TestSVD:
             assert exact_svd.u.shape == (
                 n_rows,
                 n_components,
-            ), "The u matrix should have shape (n_rows, n_components)."
+            ), "The u matrix should have shape (n_samples, n_components)."
             assert exact_svd.v.shape == (
                 n_components,
                 n_cols,
-            ), "The v matrix should have shape (n_components, n_cols)."
+            ), "The v matrix should have shape (n_components, n_features)."
             assert exact_svd.s.shape == (
                 n_components,
             ), "The s vector should have shape (n_components,)."
 
-    @pytest.mark.parametrize(
-        ("matrix_type", "n_rows", "n_cols"),
-        [
-            ("tall-and-skinny", 10_000, 100),
-            ("short-and-fat", 100, 10_000),
-            ("square", 1_000, 1_000),
-        ],
-    )
+    def test_randomized_svd(self, matrix_type, n_rows, n_cols):
+        print(f"Running randomized SVD test for {matrix_type} matrix.")
+        self._make_matrix(n_rows, n_cols)
+        n_components = 10
+        randomized_svd = RandomizedSVD(self.X)
+        randomized_svd.fit(n_components)
+        assert isinstance(randomized_svd.u, da.Array), (
+            "The u matrix should be of type dask.array.Array, "
+            f"not {type(randomized_svd.u)}."
+        )
+        assert isinstance(randomized_svd.v, da.Array), (
+            "The v matrix should be of type dask.array.Array, "
+            f"not {type(randomized_svd.v)}."
+        )
+        assert isinstance(randomized_svd.s, np.ndarray), (
+            "The s vector should be of type numpy.ndarray, "
+            f"not {type(randomized_svd.s)}."
+        )
+        assert randomized_svd.u.shape == (
+            n_rows,
+            n_components,
+        ), "The u matrix should have shape (n_samples, n_components)."
+        assert randomized_svd.v.shape == (
+            n_components,
+            n_cols,
+        ), "The v matrix should have shape (n_components, n_features)."
+        assert randomized_svd.s.shape == (
+            n_components,
+        ), "The s vector should have shape (n_components,)."
+
     def test_truncated_svd(self, matrix_type, n_rows, n_cols):
         self._make_matrix(n_rows, n_cols)
         n_components = 10
