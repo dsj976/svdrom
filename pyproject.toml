@@ -75,6 +75,9 @@ disallow_untyped_defs = false
 disallow_incomplete_defs = false
 check_untyped_defs = true
 strict = false
+[[tool.mypy.overrides]]
+module = ["dask_ml.decomposition.*"]
+ignore_missing_imports = true
 
 [tool.ruff]
 src = ["src"]

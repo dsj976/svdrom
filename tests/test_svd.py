@@ -2,7 +2,7 @@ import dask.array as da
 import numpy as np
 import pytest
 
-from svdrom.svd import ExactSVD, RandomizedSVD
+from svdrom.svd import ExactSVD, RandomizedSVD, TruncatedSVD
 
 
 @pytest.mark.parametrize(
@@ -97,11 +97,77 @@ class TestSVD:
         assert randomized_svd.u.shape == (
             n_rows,
             n_components,
-        ), "The u matrix should have shape (n_samples, n_components)."
+        ), (
+            f"The u matrix should have shape ({n_rows}, {n_components}), "
+            f"but got {randomized_svd.u.shape}."
+        )
         assert randomized_svd.v.shape == (
             n_components,
             n_cols,
-        ), "The v matrix should have shape (n_components, n_features)."
-        assert randomized_svd.s.shape == (
-            n_components,
-        ), "The s vector should have shape (n_components,)."
+        ), (
+            f"The v matrix should have shape ({n_components}, {n_cols}), "
+            f"but got {randomized_svd.v.shape}."
+        )
+        assert randomized_svd.s.shape == (n_components,), (
+            f"The s vector should have shape ({n_components},), "
+            f"but got {randomized_svd.s.shape}."
+        )
+
+    def test_truncated_svd(self, matrix_type, n_rows, n_cols):
+        print(f"Running truncated SVD test for {matrix_type} matrix.")
+        self._make_matrix(n_rows, n_cols)
+        n_components = 10
+
+        if matrix_type == "square":
+            with pytest.raises(RuntimeError):
+                TruncatedSVD(self.X)
+        else:
+            truncated_svd = TruncatedSVD(self.X)
+            truncated_svd.fit(n_components=n_components)
+
+            assert hasattr(
+                truncated_svd, "u"
+            ), "The truncated_svd object should have attribute 'u'."
+            assert hasattr(
+                truncated_svd, "s"
+            ), "The truncated_svd object should have attribute 's'."
+            assert hasattr(
+                truncated_svd, "v"
+            ), "The truncated_svd object should have attribute 'v'."
+
+            u, s, v = truncated_svd.u, truncated_svd.s, truncated_svd.v
+
+            assert isinstance(
+                u, da.Array
+            ), f"The u matrix should be of type dask.array.Array, not {type(u)}."
+            assert isinstance(
+                s, np.ndarray
+            ), f"The s vector should be of type numpy.ndarray, not {type(s)}."
+            assert isinstance(
+                v, da.Array
+            ), f"The v matrix should be of type dask.array.Array, not {type(v)}."
+
+            assert u.shape == (n_rows, n_components), (
+                f"The u matrix should have shape ({n_rows}, {n_components}), "
+                f"but got {u.shape}."
+            )
+            assert s.shape == (n_components,), (
+                f"The s vector should have shape ({n_components},), "
+                f"but got {s.shape}."
+            )
+            assert v.shape == (n_components, n_cols), (
+                f"The v matrix should have shape ({n_components}, {n_cols}), "
+                f"but got {v.shape}."
+            )
+
+            # check orthogonality
+            identity_k = np.eye(n_components, dtype=np.float32)
+            u_ortho = (u.T @ u).compute()
+            v_ortho = (v @ v.T).compute()
+
+            assert np.allclose(
+                u_ortho, identity_k, atol=1e-5
+            ), "u.T @ u is not close to identity."
+            assert np.allclose(
+                v_ortho, identity_k, atol=1e-5
+            ), "v @ v.T is not close to identity."

@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 
 import dask.array as da
 from dask import persist
+from dask_ml.decomposition import TruncatedSVD as tsvd
 
 from svdrom.logger import setup_logger
 
@@ -143,11 +144,86 @@ class ExactSVD(SVD):
 
 
 class TruncatedSVD(SVD):
+    """
+    TruncatedSVD performs truncated Singular Value Decomposition (SVD)
+    on a tall-and-skinny matrix.
+
+    This class supports both tall-and-skinny and short-and-fat matrices,
+    but not square matrices. If the matrix is short-and-fat, it transposes
+    the matrix before fitting the truncated SVD. For square matrices,
+    consider using the randomized SVD algorithm instead.
+
+    Parameters
+    ----------
+    X : dask.array.Array
+        Input matrix to decompose.
+
+    Attributes
+    ----------
+    u : dask.array.Array
+        Left singular vectors.
+    v : dask.array.Array
+        Right singular vectors.
+    s : numpy.ndarray
+        Singular values.
+
+    Methods
+    -------
+    fit(n_components)
+        Compute the truncated SVD of the input matrix, keeping the
+        specified number of components.
+    """
+
     def __init__(self, X):
         super().__init__(X)
+        if self.matrix_type == "square":
+            msg = (
+                "The truncated SVD algorithm can only handle tall-and-skinny "
+                "or short-and-fat matrices. "
+                "For square/nearly-square matrices, try using the randomized "
+                "SVD algorithm instead."
+            )
+            logger.exception(msg)
+            raise RuntimeError(msg)
 
     def fit(self, n_components):
-        pass
+        logger.info("Fitting truncated SVD...")
+        decomposer = tsvd(n_components=n_components)
+
+        try:
+            if self.matrix_type == "tall-and-skinny":
+                logger.info("Using truncated SVD for tall-and-skinny matrix.")
+                X_transformed = decomposer.fit_transform(self.X)
+                s = decomposer.singular_values_
+                v_np = decomposer.components_
+                u = X_transformed / s  # unscaled
+
+                v = da.from_array(v_np, chunks=v_np.shape)
+
+            elif self.matrix_type == "short-and-fat":
+                logger.info(
+                    "Using *transposed* truncated SVD for short-and-fat matrix."
+                )
+                X_transformed_t = decomposer.fit_transform(self.X.T)
+                s = decomposer.singular_values_
+                v_t_np = decomposer.components_
+                u_t = X_transformed_t / s  # unscaled
+
+                u_np = v_t_np.T
+                v = u_t.T
+
+                u = da.from_array(u_np, chunks=u_np.shape)
+
+            self.u = u
+            self.v = v
+            self.s = s  # numpy array
+
+            logger.info("Finished fitting truncated SVD.")
+
+        except Exception as e:
+            msg = "Failed fitting truncated SVD."
+            logger.exception(msg)
+            raise RuntimeError(msg) from e
 
 
 class RandomizedSVD(SVD):
