@@ -183,8 +183,6 @@ class TruncatedSVD(SVD):
 
                 u = da.from_array(u_np, chunks=u_np.shape)
 
-            u, s, v = persist(u, s, v)
-
             self.u = u
             self.v = v
             self.s = s  # numpy array
