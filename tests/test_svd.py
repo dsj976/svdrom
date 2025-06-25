@@ -137,15 +137,15 @@ class TestSVD:
 
             u, s, v = truncated_svd.u, truncated_svd.s, truncated_svd.v
 
-            assert isinstance(u, da.Array), (
-                "The u matrix should be of type dask.array.Array, " f"not {type(u)}."
-            )
-            assert isinstance(s, np.ndarray), (
-                "The s vector should be of type numpy.ndarray, " f"not {type(s)}."
-            )
-            assert isinstance(v, da.Array), (
-                "The v matrix should be of type dask.array.Array, " f"not {type(v)}."
-            )
+            assert isinstance(
+                u, da.Array
+            ), f"The u matrix should be of type dask.array.Array, not {type(u)}."
+            assert isinstance(
+                s, np.ndarray
+            ), f"The s vector should be of type numpy.ndarray, not {type(s)}."
+            assert isinstance(
+                v, da.Array
+            ), f"The v matrix should be of type dask.array.Array, not {type(v)}."
 
             assert u.shape == (n_rows, n_components), (
                 f"The u matrix should have shape ({n_rows}, {n_components}), "
