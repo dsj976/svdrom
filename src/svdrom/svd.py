@@ -57,7 +57,7 @@ class SVD(ABC):
             self.matrix_type = "square"
 
     @abstractmethod
-    def fit(self, n_components: int):
+    def fit(self, n_components: int, **kwargs):
         pass
 
 
@@ -89,10 +89,12 @@ class ExactSVD(SVD):
 
     Methods
     -------
-    fit(n_components)
+    fit(n_components, **kwargs)
         Computes the exact SVD and stores the top `n_components`
         left singular vectors (`u`), singular values (`s`),
-        and right singular vectors (`v`).
+        and right singular vectors (`v`). Passes additional
+        keyword arguments to the underlying SVD computation
+        (see `dask.array.linalg.svd` for details).
 
     Raises
     ------
@@ -127,11 +129,11 @@ class ExactSVD(SVD):
             logger.exception(msg)
             raise RuntimeError(msg)
 
-    def fit(self, n_components):
+    def fit(self, n_components, **kwargs):
         self.X = self.X.persist()
         try:
             logger.info("Fitting exact SVD...")
-            u, s, v = da.linalg.svd(self.X)
+            u, s, v = da.linalg.svd(self.X, **kwargs)
             u, s, v = persist(u, s, v)
             self.u = u[:, :n_components]
             self.v = v[:n_components, :]
@@ -169,9 +171,16 @@ class TruncatedSVD(SVD):
 
     Methods
     -------
-    fit(n_components)
+    fit(n_components, **kwargs)
         Compute the truncated SVD of the input matrix, keeping the
-        specified number of components.
+        specified number of components. Passes additional keyword
+        arguments to the underlying SVD computation (see
+        `dask_ml.decomposition.TruncatedSVD` for details).
+
+    Raises
+    ------
+    RuntimeError
+        If input matrix is square/nearly square or if SVD computation fails.
     """
 
     def __init__(self, X):
@@ -186,9 +195,9 @@ class TruncatedSVD(SVD):
             logger.exception(msg)
             raise RuntimeError(msg)
 
-    def fit(self, n_components):
+    def fit(self, n_components, **kwargs):
         logger.info("Fitting truncated SVD...")
-        decomposer = tsvd(n_components=n_components)
+        decomposer = tsvd(n_components=n_components, **kwargs)
 
         try:
             if self.matrix_type == "tall-and-skinny":
@@ -252,9 +261,11 @@ class RandomizedSVD(SVD):
 
     Methods
     -------
-    fit(n_components)
+    fit(n_components, **kwargs)
         Computes the truncated randomized SVD with the specified
-        number of components.
+        number of components. Passes additional keyword
+        arguments to the underlying SVD computation (see
+        `dask.array.linalg.svd_compressed` for details).
 
     Raises
     ------
@@ -281,11 +292,11 @@ class RandomizedSVD(SVD):
             logger.info(msg)
             self.X = self.X.rechunk({0: -1, 1: "auto"})
 
-    def fit(self, n_components):
+    def fit(self, n_components, **kwargs):
         self.X = self.X.persist()
         try:
             logger.info("Fitting randomized SVD...")
-            u, s, v = da.linalg.svd_compressed(self.X, n_components)
+            u, s, v = da.linalg.svd_compressed(self.X, n_components, **kwargs)
             u, s, v = persist(u, s, v)
             self.u = u[:, :n_components]
             self.v = v[:n_components, :]
