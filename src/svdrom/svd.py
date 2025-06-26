@@ -46,8 +46,13 @@ class SVD(ABC):
             raise ValueError(msg)
         self.X = X
         self._check_matrix_type()
+        self._rechunk_array()
 
     def _check_matrix_type(self, aspect_ratio=10):
+        """
+        Checks if input matrix is tall-and-skinny,
+        short-and-fat or square/nearly-square
+        """
         n_rows, n_cols = self.X.shape
         if (n_rows // n_cols) >= aspect_ratio:
             self.matrix_type = "tall-and-skinny"
@@ -55,6 +60,28 @@ class SVD(ABC):
             self.matrix_type = "short-and-fat"
         else:
             self.matrix_type = "square"
+
+    def _rechunk_array(self):
+        """
+        Rechunks the input array to ensure optimal chunk sizes
+        for SVD computation based on matrix type.
+        """
+        msg = (
+            "Will need to rechunk the array before fitting the SVD. "
+            "This will add some overhead."
+        )
+        if (
+            self.matrix_type == "tall-and-skinny"
+            and self.X.shape[1] != self.X.chunksize[1]
+        ):
+            logger.info(msg)
+            self.X = self.X.rechunk({0: "auto", 1: -1})
+        if (
+            self.matrix_type == "short-and-fat"
+            and self.X.shape[0] != self.X.chunksize[0]
+        ):
+            logger.info(msg)
+            self.X = self.X.rechunk({0: -1, 1: "auto"})
 
     @abstractmethod
     def fit(self, n_components: int, **kwargs):
@@ -104,22 +131,6 @@ class ExactSVD(SVD):
 
     def __init__(self, X):
         super().__init__(X)
-        msg = (
-            "Will need to rechunk the array before fitting the SVD. "
-            "This will add some overhead."
-        )
-        if (
-            self.matrix_type == "tall-and-skinny"
-            and self.X.shape[1] != self.X.chunksize[1]
-        ):
-            logger.info(msg)
-            self.X = self.X.rechunk({0: "auto", 1: -1})
-        if (
-            self.matrix_type == "short-and-fat"
-            and self.X.shape[0] != self.X.chunksize[0]
-        ):
-            logger.info(msg)
-            self.X = self.X.rechunk({0: -1, 1: "auto"})
         if self.matrix_type == "square":
             msg = (
                 "The exact SVD algorithm can only handle tall-and-skinny "
@@ -275,22 +286,6 @@ class RandomizedSVD(SVD):
 
     def __init__(self, X):
         super().__init__(X)
-        msg = (
-            "Rechunking the array before fitting the randomized SVD. "
-            "This might add some overhead."
-        )
-        if (
-            self.matrix_type == "tall-and-skinny"
-            and self.X.shape[1] != self.X.chunksize[1]
-        ):
-            logger.info(msg)
-            self.X = self.X.rechunk({0: "auto", 1: -1})
-        if (
-            self.matrix_type == "short-and-fat"
-            and self.X.shape[0] != self.X.chunksize[0]
-        ):
-            logger.info(msg)
-            self.X = self.X.rechunk({0: -1, 1: "auto"})
 
     def fit(self, n_components, **kwargs):
         self.X = self.X.persist()
