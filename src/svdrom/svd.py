@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
 import dask.array as da
+import numpy as np
 from dask import persist
 from dask_ml.decomposition import TruncatedSVD as tsvd
 
@@ -40,6 +41,10 @@ class SVD(ABC):
     """
 
     def __init__(self, X: da.Array) -> None:
+        self.n_components = 0
+        self.u = da.empty_like(0)
+        self.s = np.empty_like(0)
+        self.v = da.empty_like(0)
         if X.ndim != 2:
             msg = "The input array must be two-dimensional."
             logger.exception(msg)
@@ -84,7 +89,13 @@ class SVD(ABC):
             self.X = self.X.rechunk({0: -1, 1: "auto"})
 
     @abstractmethod
-    def fit(self, n_components: int, **kwargs):
+    def fit(self, n_components: int, transform: bool, **kwargs):
+        pass
+
+    @abstractmethod
+    def transform(
+        self,
+    ):
         pass
 
 
@@ -140,18 +151,43 @@ class ExactSVD(SVD):
             logger.exception(msg)
             raise RuntimeError(msg)
 
-    def fit(self, n_components, **kwargs):
+    def fit(self, n_components=-1, transform=False, **kwargs):
+        self.n_components = n_components
         self.X = self.X.persist()
         try:
             logger.info("Fitting exact SVD...")
             u, s, v = da.linalg.svd(self.X, **kwargs)
-            u, s, v = persist(u, s, v)
-            self.u = u[:, :n_components]
-            self.v = v[:n_components, :]
-            self.s = s[:n_components].compute()
+            if self.n_components != -1:
+                u = u[:, : self.n_components]
+                s = s[: self.n_components]
+                v = v[: self.n_components, :]
+            if transform:
+                u, s, v = persist(u, s, v)
+            elif self.matrix_type == "tall-and-skinny":
+                s, v = persist(s, v)
+            elif self.matrix_type == "short-and-fat":
+                s, u = persist(s, u)
+            self.u = u
+            self.v = v
+            self.s = s.compute()
             logger.info("Finished fitting exact SVD.")
         except Exception as e:
             msg = "Failed fitting exact SVD."
+            logger.exception(msg)
+            raise RuntimeError(msg) from e
+
+    def transform(self):
+        if self.n_components == 0:
+            msg = "You have to call `fit` before you can call `transform`."
+            logger.exception(msg)
+            raise RuntimeError(msg)
+        try:
+            if self.matrix_type == "tall-and-skinny":
+                self.u = self.u.persist()
+            if self.matrix_type == "short-and-fat":
+                self.v = self.v.persist()
+        except Exception as e:
+            msg = "Failed transforming input matrix."
             logger.exception(msg)
             raise RuntimeError(msg) from e
 
