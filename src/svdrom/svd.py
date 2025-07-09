@@ -108,44 +108,12 @@ class SVD(ABC):
 
 
 class ExactSVD(SVD):
-    """
-    ExactSVD performs an exact Singular Value Decomposition (SVD)
+    """Performs an exact Singular Value Decomposition (SVD)
     on a Dask array.
 
-    This class inherits from the SVD base class and implements
-    the exact SVD algorithm for matrices that are either
-    tall-and-skinny or short-and-fat, with an aspect ratio >= 10.
-    It rechunks the input array as needed to optimize SVD
-    computation and raises an exception if the matrix is square,
-    recommending the use of randomized SVD instead.
-
-    Parameters
-    ----------
-    X : dask.array.Array
-        The input matrix to decompose.
-
-    Attributes
-    ----------
-    u : dask.array.Array
-        Left singular vectors, shape (n_samples, n_components).
-    s : numpy.ndarray
-        Singular values, shape (n_components,).
-    v : dask.array.Array
-        Right singular vectors, shape (n_components, n_features).
-
-    Methods
-    -------
-    fit(n_components, **kwargs)
-        Computes the exact SVD and stores the top `n_components`
-        left singular vectors (`u`), singular values (`s`),
-        and right singular vectors (`v`). Passes additional
-        keyword arguments to the underlying SVD computation
-        (see `dask.array.linalg.svd` for details).
-
-    Raises
-    ------
-    RuntimeError
-        If the input matrix is square/nearly square or if SVD computation fails.
+    Inherits from the SVD base class and implements
+    Dask's exact SVD algorithm for matrices that are either
+    tall-and-skinny or short-and-fat.
     """
 
     def __init__(self, X):
@@ -160,6 +128,10 @@ class ExactSVD(SVD):
             raise RuntimeError(msg)
 
     def fit(self, n_components=-1, transform=False, **kwargs):
+        """The default value for `n_components` is -1, meaning
+        keep all SVD components. For additional keyword arguments,
+        see the documentation for `dask.array.linalg.svd`.
+        """
         self.n_components = n_components
         self.X = self.X.persist()
         try:
