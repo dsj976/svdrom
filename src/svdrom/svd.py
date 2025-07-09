@@ -132,6 +132,12 @@ class ExactSVD(SVD):
         keep all SVD components. For additional keyword arguments,
         see the documentation for `dask.array.linalg.svd`.
         """
+        if n_components != -1 and (
+            not isinstance(n_components, int) or n_components <= 0
+        ):
+            msg = "n_components must be -1 or a positive integer."
+            logger.exception(msg)
+            raise ValueError(msg)
         self.n_components = n_components
         self.X = self.X.persist()
         try:
