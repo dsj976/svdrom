@@ -11,36 +11,28 @@ logger = setup_logger("SVD", "svd.log")
 
 
 class SVD(ABC):
-    """
-    Abstract base class for performing Singular Value Decomposition (SVD) on a
-    two-dimensional Dask array.
-
-    Parameters
-    ----------
-    X : da.Array
-        The input two-dimensional Dask array to decompose.
+    """Abstract base class for performing Singular Value Decomposition (SVD) on a
+    two-dimensional Dask array. The array is rechunked automatically for an optimized
+    SVD computation.
 
     Attributes
     ----------
-    X : da.Array
-        The input data matrix.
-    matrix_type : str
-        The type of the matrix based on its aspect ratio: "tall-and-skinny",
-        "short-and-fat" or "square".
-
-    Methods
-    -------
-    fit(n_components: int)
-        Abstract method to fit the SVD model to the input data, retaining
-        the specified number of components.
-
-    Raises
-    ------
-    ValueError
-        If the input array is not two-dimensional.
+    X (dask.array.Array): The input data matrix.
+    matrix_type (str): The type of the matrix based on its aspect ratio:
+    "tall-and-skinny", "short-and-fat" or "square".
+    n_components (int): number of SVD components
+    u (dask.array.Array): left singular vectors
+    s (numpy.ndarray): singular values
+    v (dask.array.Array): right singular vectors
     """
 
     def __init__(self, X: da.Array) -> None:
+        """Initializes a SVD object.
+
+        Parameters
+        ----------
+        X (dask.array.Array): The input data matrix.
+        """
         self.n_components = 0
         self.u = da.empty_like(0)
         self.s = np.empty_like(0)
@@ -50,13 +42,19 @@ class SVD(ABC):
             logger.exception(msg)
             raise ValueError(msg)
         self.X = X
+        self.matrix_type = ""
         self._check_matrix_type()
         self._rechunk_array()
 
     def _check_matrix_type(self, aspect_ratio=10):
-        """
-        Checks if input matrix is tall-and-skinny,
-        short-and-fat or square/nearly-square
+        """Checks if input matrix is tall-and-skinny,
+        short-and-fat or square/nearly-square, based on
+        the specified aspect ratio.
+
+        Parameters
+        ----------
+        aspect_ratio (int): defines the matrix type based on the
+        ratio between number of rows and columns. Defaults to 10.
         """
         n_rows, n_cols = self.X.shape
         if (n_rows // n_cols) >= aspect_ratio:
@@ -67,8 +65,7 @@ class SVD(ABC):
             self.matrix_type = "square"
 
     def _rechunk_array(self):
-        """
-        Rechunks the input array to ensure optimal chunk sizes
+        """Rechunks the input array to ensure optimal chunk sizes
         for SVD computation based on matrix type.
         """
         msg = (
@@ -89,14 +86,25 @@ class SVD(ABC):
             self.X = self.X.rechunk({0: -1, 1: "auto"})
 
     @abstractmethod
-    def fit(self, n_components: int, transform: bool, **kwargs):
-        pass
+    def fit(self, n_components: int, transform: bool = False, **kwargs):
+        """Perform the SVD fit operation.
+
+        Parameters
+        ----------
+        n_components (int): number of SVD components to keep.
+        transform (bool): whether to compute `u` for a tall-and-skinny
+        matrix or `v` for a short-and-fat matrix, since these can be much
+        larger than the other SVD results. Defaults to False.
+        **kwargs: keyword arguments for the underlying SVD computation.
+        """
 
     @abstractmethod
     def transform(
         self,
     ):
-        pass
+        """Compute `u` for a tall-and-skinny matrix or `v` for a
+        short-and-fat matrix if you have called `fit` with `transform=False`.
+        """
 
 
 class ExactSVD(SVD):
