@@ -272,55 +272,47 @@ class TruncatedSVD(SVD):
 
 
 class RandomizedSVD(SVD):
-    """
-    RandomizedSVD performs a truncated randomized Singular Value
+    """Performs a truncated randomized Singular Value
     Decomposition (SVD) on large matrices of any shape.
 
-    Upon initialization, the input array is rechunked if necessary to
-    optimize the computation based on its shape (tall-and-skinny or
-    short-and-fat). The fit method computes the truncated SVD using
-    Dask's `svd_compressed` function.
-
-    Parameters
-    ----------
-    X : dask.array.Array
-        The input data array to decompose.
-
-    Attributes
-    ----------
-    u : dask.array.Array
-        The left singular vectors of the input matrix.
-    s : numpy.ndarray
-        The singular values of the input matrix.
-    v : dask.array.Array
-        The right singular vectors of the input matrix.
-
-    Methods
-    -------
-    fit(n_components, **kwargs)
-        Computes the truncated randomized SVD with the specified
-        number of components. Passes additional keyword
-        arguments to the underlying SVD computation (see
-        `dask.array.linalg.svd_compressed` for details).
-
-    Raises
-    ------
-    RuntimeError
-        If the randomized SVD computation fails.
+    Inherits from the SVD base class.
+    Supports tall-and-skinny, short-and-fat, and square/nearly-square
+    matrices. The SVD computation is performed with
+    `dask.array.linalg.svd_compressed`.
     """
 
     def __init__(self, X):
         super().__init__(X)
 
-    def fit(self, n_components, **kwargs):
+    def fit(self, n_components, transform=False, **kwargs):
+        """Note that if the matrix is square/nearly-square, if `transform=False`
+        only the singular values and right singular vectors will be computed
+        (i.e. same behavior as a tall-and-skinny matrix).
+
+        For additional keyword arguments, see the documentation
+        for `dask.array.linalg.svd_compressed`.
+        """
+        if not isinstance(n_components, int) or n_components <= 0:
+            msg = "n_components must be a positive integer."
+            logger.exception(msg)
+            raise ValueError(msg)
+        self.n_components = n_components
         self.X = self.X.persist()
         try:
             logger.info("Fitting randomized SVD...")
             u, s, v = da.linalg.svd_compressed(self.X, n_components, **kwargs)
-            u, s, v = persist(u, s, v)
-            self.u = u[:, :n_components]
-            self.v = v[:n_components, :]
-            self.s = s[:n_components].compute()
+            if transform:
+                u, s, v = persist(u, s, v)
+            elif (
+                self.matrix_type == "tall-and-skinny-matrix"
+                or self.matrix_type == "square"
+            ):
+                s, v = persist(s, v)
+            elif self.matrix_type == "short-and-fat":
+                s, u = persist(s, u)
+            self.u = u
+            self.v = v
+            self.s = s.compute()
             logger.info("Finished fitting randomized SVD.")
         except Exception as e:
             msg = "Failed fitting randomized SVD."
