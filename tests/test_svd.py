@@ -52,6 +52,20 @@ class TestSVD:
             n_components = 10
             exact_svd = ExactSVD(self.X)
             exact_svd.fit(n_components, transform=True)
+
+            assert hasattr(
+                exact_svd, "u"
+            ), "The exact_svd object should have attribute 'u'."
+            assert hasattr(
+                exact_svd, "s"
+            ), "The exact_svd object should have attribute 's'."
+            assert hasattr(
+                exact_svd, "v"
+            ), "The exact_svd object should have attribute 'v'."
+            assert hasattr(
+                exact_svd, "n_components"
+            ), "The exact_svd object should have attribute 'n_components'."
+
             u, s, v = exact_svd.u, exact_svd.s, exact_svd.v
             assert isinstance(
                 u, da.Array
@@ -80,6 +94,20 @@ class TestSVD:
         n_components = 10
         randomized_svd = RandomizedSVD(self.X)
         randomized_svd.fit(n_components)
+
+        assert hasattr(
+            randomized_svd, "u"
+        ), "The randomized_svd object should have attribute 'u'."
+        assert hasattr(
+            randomized_svd, "s"
+        ), "The randomized_svd object should have attribute 's'."
+        assert hasattr(
+            randomized_svd, "v"
+        ), "The randomized_svd object should have attribute 'v'."
+        assert hasattr(
+            randomized_svd, "n_components"
+        ), "The randomized_svd object should have attribute 'n_components'."
+
         u, s, v = randomized_svd.u, randomized_svd.s, randomized_svd.v
         assert isinstance(
             u, da.Array
@@ -129,6 +157,9 @@ class TestSVD:
             assert hasattr(
                 truncated_svd, "v"
             ), "The truncated_svd object should have attribute 'v'."
+            assert hasattr(
+                truncated_svd, "n_components"
+            ), "The truncated_svd object should have attribute 'n_components'."
 
             u, s, v = truncated_svd.u, truncated_svd.s, truncated_svd.v
 
