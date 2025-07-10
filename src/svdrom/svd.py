@@ -33,16 +33,16 @@ class SVD(ABC):
         ----------
         X (dask.array.Array): The input data matrix.
         """
-        self.n_components = 0
-        self.u = da.empty_like(0)
-        self.s = np.empty_like(0)
-        self.v = da.empty_like(0)
+        self._n_components = 0
+        self._u = da.empty_like(0)
+        self._s = np.empty_like(0)
+        self._v = da.empty_like(0)
         if X.ndim != 2:
             msg = "The input array must be two-dimensional."
             logger.exception(msg)
             raise ValueError(msg)
-        self.X = X
-        self.matrix_type = ""
+        self._X = X
+        self._matrix_type = ""
         self._check_matrix_type()
         self._rechunk_array()
 
@@ -56,13 +56,13 @@ class SVD(ABC):
         aspect_ratio (int): defines the matrix type based on the
         ratio between number of rows and columns. Defaults to 10.
         """
-        n_rows, n_cols = self.X.shape
+        n_rows, n_cols = self._X.shape
         if (n_rows // n_cols) >= aspect_ratio:
-            self.matrix_type = "tall-and-skinny"
+            self._matrix_type = "tall-and-skinny"
         elif (n_cols // n_rows) >= aspect_ratio:
-            self.matrix_type = "short-and-fat"
+            self._matrix_type = "short-and-fat"
         else:
-            self.matrix_type = "square"
+            self._matrix_type = "square"
 
     def _rechunk_array(self):
         """Rechunks the input array to ensure optimal chunk sizes
@@ -73,17 +73,47 @@ class SVD(ABC):
             "This will add some overhead."
         )
         if (
-            self.matrix_type == "tall-and-skinny"
-            and self.X.shape[1] != self.X.chunksize[1]
+            self._matrix_type == "tall-and-skinny"
+            and self._X.shape[1] != self._X.chunksize[1]
         ):
             logger.info(msg)
-            self.X = self.X.rechunk({0: "auto", 1: -1})
+            self._X = self._X.rechunk({0: "auto", 1: -1})
         if (
-            self.matrix_type == "short-and-fat"
-            and self.X.shape[0] != self.X.chunksize[0]
+            self._matrix_type == "short-and-fat"
+            and self._X.shape[0] != self._X.chunksize[0]
         ):
             logger.info(msg)
-            self.X = self.X.rechunk({0: -1, 1: "auto"})
+            self._X = self._X.rechunk({0: -1, 1: "auto"})
+
+    @property
+    def n_components(self) -> int:
+        """Number of SVD components (read-only)."""
+        return self._n_components
+
+    @property
+    def s(self) -> np.ndarray:
+        """Singular values (read-only)."""
+        return self._s
+
+    @property
+    def u(self) -> da.Array:
+        """Left singular vectors (read-only)."""
+        return self._u
+
+    @property
+    def v(self) -> da.Array:
+        """Right singular vectors (read-only)."""
+        return self._v
+
+    @property
+    def X(self) -> da.Array:
+        """Input matrix (read-only)."""
+        return self._X
+
+    @property
+    def matrix_type(self) -> str:
+        """Matrix type, based on aspect radio (read-only)."""
+        return self._matrix_type
 
     @abstractmethod
     def fit(self, n_components: int, transform: bool = False, **kwargs):
@@ -118,7 +148,7 @@ class ExactSVD(SVD):
 
     def __init__(self, X):
         super().__init__(X)
-        if self.matrix_type == "square":
+        if self._matrix_type == "square":
             msg = (
                 "The exact SVD algorithm can only handle tall-and-skinny "
                 "or short-and-fat matrices, i.e. the aspect ratio must be "
@@ -138,24 +168,24 @@ class ExactSVD(SVD):
             msg = "n_components must be -1 or a positive integer."
             logger.exception(msg)
             raise ValueError(msg)
-        self.n_components = n_components
-        self.X = self.X.persist()
+        self._n_components = n_components
+        self._X = self._X.persist()
         try:
             logger.info("Fitting exact SVD...")
-            u, s, v = da.linalg.svd(self.X, **kwargs)
-            if self.n_components != -1:
-                u = u[:, : self.n_components]
-                s = s[: self.n_components]
-                v = v[: self.n_components, :]
+            u, s, v = da.linalg.svd(self._X, **kwargs)
+            if self._n_components != -1:
+                u = u[:, : self._n_components]
+                s = s[: self._n_components]
+                v = v[: self._n_components, :]
             if transform:
                 u, s, v = persist(u, s, v)
-            elif self.matrix_type == "tall-and-skinny":
+            elif self._matrix_type == "tall-and-skinny":
                 s, v = persist(s, v)
-            elif self.matrix_type == "short-and-fat":
+            elif self._matrix_type == "short-and-fat":
                 s, u = persist(s, u)
-            self.u = u
-            self.v = v
-            self.s = s.compute()
+            self._u = u
+            self._v = v
+            self._s = s.compute()
             logger.info("Finished fitting exact SVD.")
         except Exception as e:
             msg = "Failed fitting exact SVD."
@@ -163,15 +193,15 @@ class ExactSVD(SVD):
             raise RuntimeError(msg) from e
 
     def transform(self):
-        if self.n_components == 0:
+        if self._n_components == 0:
             msg = "You have to call `fit` before you can call `transform`."
             logger.exception(msg)
             raise RuntimeError(msg)
         try:
-            if self.matrix_type == "tall-and-skinny":
-                self.u = self.u.persist()
-            if self.matrix_type == "short-and-fat":
-                self.v = self.v.persist()
+            if self._matrix_type == "tall-and-skinny":
+                self._u = self._u.persist()
+            if self._matrix_type == "short-and-fat":
+                self._v = self._v.persist()
         except Exception as e:
             msg = "Failed transforming input matrix."
             logger.exception(msg)
@@ -191,7 +221,7 @@ class TruncatedSVD(SVD):
     def __init__(self, X):
         super().__init__(X)
         self._decomposer = None
-        if self.matrix_type == "square":
+        if self._matrix_type == "square":
             msg = (
                 "The truncated SVD algorithm can only handle tall-and-skinny "
                 "or short-and-fat matrices. "
@@ -209,41 +239,41 @@ class TruncatedSVD(SVD):
             msg = "n_components must be a positive integer."
             logger.exception(msg)
             raise ValueError(msg)
-        self.n_components = n_components
+        self._n_components = n_components
 
         logger.info("Fitting truncated SVD...")
-        self._decomposer = tsvd(n_components=self.n_components, **kwargs)
+        self._decomposer = tsvd(n_components=self._n_components, **kwargs)
 
         try:
-            if self.matrix_type == "tall-and-skinny":
+            if self._matrix_type == "tall-and-skinny":
                 logger.info("Using truncated SVD for tall-and-skinny matrix.")
                 if transform:
-                    X_transformed = self._decomposer.fit_transform(self.X)
-                    self.u = (
+                    X_transformed = self._decomposer.fit_transform(self._X)
+                    self._u = (
                         X_transformed / self._decomposer.singular_values_
                     )  # unscaled
                 else:
-                    self._decomposer.fit(self.X)
-                self.s = self._decomposer.singular_values_  # numpy array
+                    self._decomposer.fit(self._X)
+                self._s = self._decomposer.singular_values_  # numpy array
                 v_np = self._decomposer.components_
-                self.v = da.from_array(v_np, chunks=v_np.shape)
+                self._v = da.from_array(v_np, chunks=v_np.shape)
 
-            elif self.matrix_type == "short-and-fat":
+            elif self._matrix_type == "short-and-fat":
                 logger.info(
                     "Using *transposed* truncated SVD for short-and-fat matrix."
                 )
                 if transform:
-                    X_transformed_t = self._decomposer.fit_transform(self.X.T)
+                    X_transformed_t = self._decomposer.fit_transform(self._X.T)
                     u_t = (
                         X_transformed_t / self._decomposer.singular_values_
                     )  # unscaled
-                    self.v = u_t.T
+                    self._v = u_t.T
                 else:
-                    self._decomposer.fit(self.X.T)
-                self.s = self._decomposer.singular_values_  # numpy array
+                    self._decomposer.fit(self._X.T)
+                self._s = self._decomposer.singular_values_  # numpy array
                 v_t_np = self._decomposer.components_
                 u_np = v_t_np.T
-                self.u = da.from_array(u_np, chunks=u_np.shape)
+                self._u = da.from_array(u_np, chunks=u_np.shape)
 
             logger.info("Finished fitting truncated SVD.")
 
@@ -258,13 +288,13 @@ class TruncatedSVD(SVD):
             logger.exception(msg)
             raise RuntimeError(msg)
         try:
-            if self.matrix_type == "tall-and-skinny":
-                X_transformed = self._decomposer.transform(self.X)
-                self.u = X_transformed / self._decomposer.singular_values_  # unscaled
-            if self.matrix_type == "short-and-fat":
-                X_transformed_t = self._decomposer.transform(self.X.T)
+            if self._matrix_type == "tall-and-skinny":
+                X_transformed = self._decomposer.transform(self._X)
+                self._u = X_transformed / self._decomposer.singular_values_  # unscaled
+            if self._matrix_type == "short-and-fat":
+                X_transformed_t = self._decomposer.transform(self._X.T)
                 u_t = X_transformed_t / self._decomposer.singular_values_  # unscaled
-                self.v = u_t.T
+                self._v = u_t.T
         except Exception as e:
             msg = "Failed transforming input matrix."
             logger.exception(msg)
@@ -296,23 +326,23 @@ class RandomizedSVD(SVD):
             msg = "n_components must be a positive integer."
             logger.exception(msg)
             raise ValueError(msg)
-        self.n_components = n_components
-        self.X = self.X.persist()
+        self._n_components = n_components
+        self._X = self._X.persist()
         try:
             logger.info("Fitting randomized SVD...")
-            u, s, v = da.linalg.svd_compressed(self.X, n_components, **kwargs)
+            u, s, v = da.linalg.svd_compressed(self._X, n_components, **kwargs)
             if transform:
                 u, s, v = persist(u, s, v)
             elif (
-                self.matrix_type == "tall-and-skinny-matrix"
-                or self.matrix_type == "square"
+                self._matrix_type == "tall-and-skinny-matrix"
+                or self._matrix_type == "square"
             ):
                 s, v = persist(s, v)
-            elif self.matrix_type == "short-and-fat":
+            elif self._matrix_type == "short-and-fat":
                 s, u = persist(s, u)
-            self.u = u
-            self.v = v
-            self.s = s.compute()
+            self._u = u
+            self._v = v
+            self._s = s.compute()
             logger.info("Finished fitting randomized SVD.")
         except Exception as e:
             msg = "Failed fitting randomized SVD."
@@ -320,15 +350,15 @@ class RandomizedSVD(SVD):
             raise RuntimeError(msg) from e
 
     def transform(self):
-        if self.n_components == 0:
+        if self._n_components == 0:
             msg = "You have to call `fit` before you can call `transform`."
             logger.exception(msg)
             raise RuntimeError(msg)
         try:
-            if self.matrix_type == "tall-and-skinny" or self.matrix_type == "square":
-                self.u = self.u.persist()
-            if self.matrix_type == "short-and-fat":
-                self.v = self.v.persist()
+            if self._matrix_type == "tall-and-skinny" or self._matrix_type == "square":
+                self._u = self._u.persist()
+            if self._matrix_type == "short-and-fat":
+                self._v = self._v.persist()
         except Exception as e:
             msg = "Failed transforming input matrix."
             logger.exception(msg)

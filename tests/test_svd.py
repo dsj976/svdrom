@@ -52,27 +52,25 @@ class TestSVD:
             n_components = 10
             exact_svd = ExactSVD(self.X)
             exact_svd.fit(n_components, transform=True)
-            assert isinstance(exact_svd.u, da.Array), (
-                "The u matrix should be of type dask.array.Array, "
-                f"not {type(exact_svd.u)}."
-            )
-            assert isinstance(exact_svd.v, da.Array), (
-                "The v matrix should be of type dask.array.Array, "
-                f"not {type(exact_svd.v)}."
-            )
-            assert isinstance(exact_svd.s, np.ndarray), (
-                "The s vector should be of type numpy.ndarray, "
-                f"not {type(exact_svd.s)}."
-            )
-            assert exact_svd.u.shape == (
+            u, s, v = exact_svd.u, exact_svd.s, exact_svd.v
+            assert isinstance(
+                u, da.Array
+            ), f"The u matrix should be of type dask.array.Array, not {type(u)}."
+            assert isinstance(
+                v, da.Array
+            ), f"The v matrix should be of type dask.array.Array, not {type(v)}."
+            assert isinstance(
+                s, np.ndarray
+            ), f"The s vector should be of type numpy.ndarray, not {type(s)}."
+            assert u.shape == (
                 n_rows,
                 n_components,
             ), "The u matrix should have shape (n_samples, n_components)."
-            assert exact_svd.v.shape == (
+            assert v.shape == (
                 n_components,
                 n_cols,
             ), "The v matrix should have shape (n_components, n_features)."
-            assert exact_svd.s.shape == (
+            assert s.shape == (
                 n_components,
             ), "The s vector should have shape (n_components,)."
 
@@ -82,36 +80,33 @@ class TestSVD:
         n_components = 10
         randomized_svd = RandomizedSVD(self.X)
         randomized_svd.fit(n_components)
-        assert isinstance(randomized_svd.u, da.Array), (
-            "The u matrix should be of type dask.array.Array, "
-            f"not {type(randomized_svd.u)}."
-        )
-        assert isinstance(randomized_svd.v, da.Array), (
-            "The v matrix should be of type dask.array.Array, "
-            f"not {type(randomized_svd.v)}."
-        )
-        assert isinstance(randomized_svd.s, np.ndarray), (
-            "The s vector should be of type numpy.ndarray, "
-            f"not {type(randomized_svd.s)}."
-        )
-        assert randomized_svd.u.shape == (
+        u, s, v = randomized_svd.u, randomized_svd.s, randomized_svd.v
+        assert isinstance(
+            u, da.Array
+        ), f"The u matrix should be of type dask.array.Array, not {type(u)}."
+        assert isinstance(
+            v, da.Array
+        ), f"The v matrix should be of type dask.array.Array, not {type(v)}."
+        assert isinstance(
+            s, np.ndarray
+        ), f"The s vector should be of type numpy.ndarray, not {type(s)}."
+        assert u.shape == (
             n_rows,
             n_components,
         ), (
             f"The u matrix should have shape ({n_rows}, {n_components}), "
-            f"but got {randomized_svd.u.shape}."
+            f"but got {u.shape}."
         )
-        assert randomized_svd.v.shape == (
+        assert v.shape == (
             n_components,
             n_cols,
         ), (
             f"The v matrix should have shape ({n_components}, {n_cols}), "
-            f"but got {randomized_svd.v.shape}."
+            f"but got {v.shape}."
         )
-        assert randomized_svd.s.shape == (n_components,), (
-            f"The s vector should have shape ({n_components},), "
-            f"but got {randomized_svd.s.shape}."
-        )
+        assert s.shape == (
+            n_components,
+        ), f"The s vector should have shape ({n_components},), but got {s.shape}."
 
     def test_truncated_svd(self, matrix_type, n_rows, n_cols):
         print(f"Running truncated SVD test for {matrix_type} matrix.")
