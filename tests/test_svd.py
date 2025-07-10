@@ -51,7 +51,7 @@ class TestSVD:
         else:
             n_components = 10
             exact_svd = ExactSVD(self.X)
-            exact_svd.fit(n_components)
+            exact_svd.fit(n_components, transform=True)
             assert isinstance(exact_svd.u, da.Array), (
                 "The u matrix should be of type dask.array.Array, "
                 f"not {type(exact_svd.u)}."
@@ -123,7 +123,7 @@ class TestSVD:
                 TruncatedSVD(self.X)
         else:
             truncated_svd = TruncatedSVD(self.X)
-            truncated_svd.fit(n_components=n_components)
+            truncated_svd.fit(n_components=n_components, transform=True)
 
             assert hasattr(
                 truncated_svd, "u"

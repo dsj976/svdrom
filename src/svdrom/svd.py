@@ -252,6 +252,24 @@ class TruncatedSVD(SVD):
             logger.exception(msg)
             raise RuntimeError(msg) from e
 
+    def transform(self):
+        if self._decomposer is None:
+            msg = "You have to call `fit` before you can call `transform`."
+            logger.exception(msg)
+            raise RuntimeError(msg)
+        try:
+            if self.matrix_type == "tall-and-skinny":
+                X_transformed = self._decomposer.transform(self.X)
+                self.u = X_transformed / self._decomposer.singular_values_  # unscaled
+            if self.matrix_type == "short-and-fat":
+                X_transformed_t = self._decomposer.transform(self.X.T)
+                u_t = X_transformed_t / self._decomposer.singular_values_  # unscaled
+                self.v = u_t.T
+        except Exception as e:
+            msg = "Failed transforming input matrix."
+            logger.exception(msg)
+            raise RuntimeError(msg) from e
+
 
 class RandomizedSVD(SVD):
     """
