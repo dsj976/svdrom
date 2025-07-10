@@ -93,7 +93,7 @@ class TestSVD:
         self._make_matrix(n_rows, n_cols)
         n_components = 10
         randomized_svd = RandomizedSVD(self.X)
-        randomized_svd.fit(n_components)
+        randomized_svd.fit(n_components, transform=True)
 
         assert hasattr(
             randomized_svd, "u"
