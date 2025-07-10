@@ -179,45 +179,18 @@ class ExactSVD(SVD):
 
 
 class TruncatedSVD(SVD):
-    """
-    TruncatedSVD performs truncated Singular Value Decomposition (SVD)
-    on a tall-and-skinny matrix.
+    """Performs a truncated Singular Value Decomposition (SVD)
+    on a Dask array.
 
-    This class supports both tall-and-skinny and short-and-fat matrices,
+    Inherits from the SVD base class.
+    Supports both tall-and-skinny and short-and-fat matrices,
     but not square matrices. If the matrix is short-and-fat, it transposes
-    the matrix before fitting the truncated SVD. For square matrices,
-    consider using the randomized SVD algorithm instead.
-
-    Parameters
-    ----------
-    X : dask.array.Array
-        Input matrix to decompose.
-
-    Attributes
-    ----------
-    u : dask.array.Array
-        Left singular vectors.
-    v : dask.array.Array
-        Right singular vectors.
-    s : numpy.ndarray
-        Singular values.
-
-    Methods
-    -------
-    fit(n_components, **kwargs)
-        Compute the truncated SVD of the input matrix, keeping the
-        specified number of components. Passes additional keyword
-        arguments to the underlying SVD computation (see
-        `dask_ml.decomposition.TruncatedSVD` for details).
-
-    Raises
-    ------
-    RuntimeError
-        If input matrix is square/nearly square or if SVD computation fails.
+    the matrix into a tall-and-skinny one before fitting the truncated SVD.
     """
 
     def __init__(self, X):
         super().__init__(X)
+        self._decomposer = None
         if self.matrix_type == "square":
             msg = (
                 "The truncated SVD algorithm can only handle tall-and-skinny "
@@ -228,37 +201,49 @@ class TruncatedSVD(SVD):
             logger.exception(msg)
             raise RuntimeError(msg)
 
-    def fit(self, n_components, **kwargs):
+    def fit(self, n_components, transform=False, **kwargs):
+        """For additional keyword arguments, see the documentation
+        for `dask_ml.decomposition.TruncatedSVD`.
+        """
+        if not isinstance(n_components, int) or n_components <= 0:
+            msg = "n_components must be a positive integer."
+            logger.exception(msg)
+            raise ValueError(msg)
+        self.n_components = n_components
+
         logger.info("Fitting truncated SVD...")
-        decomposer = tsvd(n_components=n_components, **kwargs)
+        self._decomposer = tsvd(n_components=self.n_components, **kwargs)
 
         try:
             if self.matrix_type == "tall-and-skinny":
                 logger.info("Using truncated SVD for tall-and-skinny matrix.")
-                X_transformed = decomposer.fit_transform(self.X)
-                s = decomposer.singular_values_
-                v_np = decomposer.components_
-                u = X_transformed / s  # unscaled
-
-                v = da.from_array(v_np, chunks=v_np.shape)
+                if transform:
+                    X_transformed = self._decomposer.fit_transform(self.X)
+                    self.u = (
+                        X_transformed / self._decomposer.singular_values_
+                    )  # unscaled
+                else:
+                    self._decomposer.fit(self.X)
+                self.s = self._decomposer.singular_values_  # numpy array
+                v_np = self._decomposer.components_
+                self.v = da.from_array(v_np, chunks=v_np.shape)
 
             elif self.matrix_type == "short-and-fat":
                 logger.info(
                     "Using *transposed* truncated SVD for short-and-fat matrix."
                 )
-                X_transformed_t = decomposer.fit_transform(self.X.T)
-                s = decomposer.singular_values_
-                v_t_np = decomposer.components_
-                u_t = X_transformed_t / s  # unscaled
-
+                if transform:
+                    X_transformed_t = self._decomposer.fit_transform(self.X.T)
+                    u_t = (
+                        X_transformed_t / self._decomposer.singular_values_
+                    )  # unscaled
+                    self.v = u_t.T
+                else:
+                    self._decomposer.fit(self.X.T)
+                self.s = self._decomposer.singular_values_  # numpy array
+                v_t_np = self._decomposer.components_
                 u_np = v_t_np.T
-                v = u_t.T
-
-                u = da.from_array(u_np, chunks=u_np.shape)
-
-            self.u = u
-            self.v = v
-            self.s = s  # numpy array
+                self.u = da.from_array(u_np, chunks=u_np.shape)
 
             logger.info("Finished fitting truncated SVD.")
 
