@@ -318,3 +318,18 @@ class RandomizedSVD(SVD):
             msg = "Failed fitting randomized SVD."
             logger.exception(msg)
             raise RuntimeError(msg) from e
+
+    def transform(self):
+        if self.n_components == 0:
+            msg = "You have to call `fit` before you can call `transform`."
+            logger.exception(msg)
+            raise RuntimeError(msg)
+        try:
+            if self.matrix_type == "tall-and-skinny" or self.matrix_type == "square":
+                self.u = self.u.persist()
+            if self.matrix_type == "short-and-fat":
+                self.v = self.v.persist()
+        except Exception as e:
+            msg = "Failed transforming input matrix."
+            logger.exception(msg)
+            raise RuntimeError(msg) from e
