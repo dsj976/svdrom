@@ -39,6 +39,8 @@ class TestSVD:
         Checks output types and shapes for correctness.
     """
 
+    n_components = 10
+
     def _make_matrix(self, n_rows, n_cols):
         self.X = da.random.random((n_rows, n_cols), chunks="auto").astype("float32")
 
@@ -49,9 +51,8 @@ class TestSVD:
             with pytest.raises(RuntimeError):
                 exact_svd = ExactSVD(self.X)
         else:
-            n_components = 10
             exact_svd = ExactSVD(self.X)
-            exact_svd.fit(n_components, transform=True)
+            exact_svd.fit(self.n_components, transform=True)
 
             assert hasattr(
                 exact_svd, "u"
@@ -78,22 +79,21 @@ class TestSVD:
             ), f"The s vector should be of type numpy.ndarray, not {type(s)}."
             assert u.shape == (
                 n_rows,
-                n_components,
+                self.n_components,
             ), "The u matrix should have shape (n_samples, n_components)."
             assert v.shape == (
-                n_components,
+                self.n_components,
                 n_cols,
             ), "The v matrix should have shape (n_components, n_features)."
             assert s.shape == (
-                n_components,
+                self.n_components,
             ), "The s vector should have shape (n_components,)."
 
     def test_randomized_svd(self, matrix_type, n_rows, n_cols):
         print(f"Running randomized SVD test for {matrix_type} matrix.")
         self._make_matrix(n_rows, n_cols)
-        n_components = 10
         randomized_svd = RandomizedSVD(self.X)
-        randomized_svd.fit(n_components, transform=True)
+        randomized_svd.fit(self.n_components, transform=True)
 
         assert hasattr(
             randomized_svd, "u"
@@ -120,33 +120,32 @@ class TestSVD:
         ), f"The s vector should be of type numpy.ndarray, not {type(s)}."
         assert u.shape == (
             n_rows,
-            n_components,
+            self.n_components,
         ), (
-            f"The u matrix should have shape ({n_rows}, {n_components}), "
+            f"The u matrix should have shape ({n_rows}, {self.n_components}), "
             f"but got {u.shape}."
         )
         assert v.shape == (
-            n_components,
+            self.n_components,
             n_cols,
         ), (
-            f"The v matrix should have shape ({n_components}, {n_cols}), "
+            f"The v matrix should have shape ({self.n_components}, {n_cols}), "
             f"but got {v.shape}."
         )
         assert s.shape == (
-            n_components,
-        ), f"The s vector should have shape ({n_components},), but got {s.shape}."
+            self.n_components,
+        ), f"The s vector should have shape ({self.n_components},), but got {s.shape}."
 
     def test_truncated_svd(self, matrix_type, n_rows, n_cols):
         print(f"Running truncated SVD test for {matrix_type} matrix.")
         self._make_matrix(n_rows, n_cols)
-        n_components = 10
 
         if matrix_type == "square":
             with pytest.raises(RuntimeError):
                 TruncatedSVD(self.X)
         else:
             truncated_svd = TruncatedSVD(self.X)
-            truncated_svd.fit(n_components=n_components, transform=True)
+            truncated_svd.fit(n_components=self.n_components, transform=True)
 
             assert hasattr(
                 truncated_svd, "u"
@@ -173,21 +172,21 @@ class TestSVD:
                 v, da.Array
             ), f"The v matrix should be of type dask.array.Array, not {type(v)}."
 
-            assert u.shape == (n_rows, n_components), (
-                f"The u matrix should have shape ({n_rows}, {n_components}), "
+            assert u.shape == (n_rows, self.n_components), (
+                f"The u matrix should have shape ({n_rows}, {self.n_components}), "
                 f"but got {u.shape}."
             )
-            assert s.shape == (n_components,), (
-                f"The s vector should have shape ({n_components},), "
+            assert s.shape == (self.n_components,), (
+                f"The s vector should have shape ({self.n_components},), "
                 f"but got {s.shape}."
             )
-            assert v.shape == (n_components, n_cols), (
-                f"The v matrix should have shape ({n_components}, {n_cols}), "
+            assert v.shape == (self.n_components, n_cols), (
+                f"The v matrix should have shape ({self.n_components}, {n_cols}), "
                 f"but got {v.shape}."
             )
 
             # check orthogonality
-            identity_k = np.eye(n_components, dtype=np.float32)
+            identity_k = np.eye(self.n_components, dtype=np.float32)
             u_ortho = (u.T @ u).compute()
             v_ortho = (v @ v.T).compute()
 
