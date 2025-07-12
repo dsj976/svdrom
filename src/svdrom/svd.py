@@ -169,7 +169,6 @@ class ExactSVD(SVD):
             logger.exception(msg)
             raise ValueError(msg)
         self._n_components = n_components
-        self._X = self._X.persist()
         try:
             logger.info("Fitting exact SVD...")
             u, s, v = da.linalg.svd(self._X, **kwargs)
@@ -327,7 +326,6 @@ class RandomizedSVD(SVD):
             logger.exception(msg)
             raise ValueError(msg)
         self._n_components = n_components
-        self._X = self._X.persist()
         try:
             logger.info("Fitting randomized SVD...")
             u, s, v = da.linalg.svd_compressed(self._X, n_components, **kwargs)
