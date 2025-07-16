@@ -30,6 +30,7 @@ classifiers = [
 dependencies = [
   "dask[complete]",
   "xarray[complete]",
+  "dask-ml",
 ]
 
 [project.optional-dependencies]
@@ -75,12 +76,8 @@ disallow_incomplete_defs = false
 check_untyped_defs = true
 strict = false
 [[tool.mypy.overrides]]
-module = [
-  "dask.distributed.*",
-  "xarray.*",
-]
+module = ["dask_ml.decomposition.*"]
 ignore_missing_imports = true
-
 
 [tool.ruff]
 src = ["src"]
