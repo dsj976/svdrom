@@ -241,7 +241,7 @@ class TruncatedSVD(SVD):
         self._n_components = n_components
 
         logger.info("Fitting truncated SVD...")
-        self._decomposer = tsvd(n_components=self._n_components, **kwargs)
+        self._decomposer = tsvd(n_components=self._n_components, algorithm="tsqr", **kwargs)
 
         try:
             if self._matrix_type == "tall-and-skinny":
