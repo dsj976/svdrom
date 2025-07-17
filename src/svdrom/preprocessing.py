@@ -4,52 +4,51 @@ import numpy as np
 import xarray as xr
 
 
-class ArrayPreprocessor:
-    def variable_spatial_stack(
-        self, X: xr.Dataset | xr.DataArray, dims: Sequence[str]
-    ) -> xr.DataArray:
-        """Stack multiple dimensions of an input Xarray Dataset or
-        DataArray into a single new 'samples' dimension.
+def variable_spatial_stack(
+    X: xr.Dataset | xr.DataArray, dims: Sequence[str]
+) -> xr.DataArray:
+    """Stack multiple dimensions of an input Xarray Dataset or
+    DataArray into a single new 'samples' dimension.
 
-        Parameters
-        ----------
-        X (xr.Dataset | xr.DataArray): the input data to stack.
-        dims (Iterable[str]): the dimensions to stack together into a
-        single spatial dimension (e.g. ('x', 'y') or ('lat', 'lon')).
+    Parameters
+    ----------
+    X (xr.Dataset | xr.DataArray): the input data to stack.
+    dims (Iterable[str]): the dimensions to stack together into a
+    single spatial dimension (e.g. ('x', 'y') or ('lat', 'lon')).
 
-        Returns
-        -------
-        xr.DataArray: The array with the specified dimensions stacked
-        into a single spatial dimension.
+    Returns
+    -------
+    xr.DataArray: The array with the specified dimensions stacked
+    into a single spatial dimension.
 
-        Notes
-        -----
-        If the input Xarray object is a Dataset containing multiple variables,
-        all variables will be stacked together along the new 'samples' dimension.
-        The resulting DataArray will have a 'samples' dimension that combines
-        the specified spatial dimensions (and the variable dimension if the input
-        was a Dataset).
-        The returned xarray object is Dask-backed and lazy if the input
-        is Dask-backed.
-        """
+    Notes
+    -----
+    If the input Xarray object is a Dataset containing multiple variables,
+    all variables will be stacked together along the new 'samples' dimension.
+    The resulting DataArray will have a 'samples' dimension that combines
+    the specified spatial dimensions (and the variable dimension if the input
+    was a Dataset).
+    The returned xarray object is Dask-backed and lazy if the input
+    is Dask-backed.
+    """
 
-        dims = list(dims)
-        if isinstance(X, xr.Dataset):
-            X = X.to_dataarray(dim="variable")
-            dims.insert(0, "variable")
+    dims = list(dims)
+    if isinstance(X, xr.Dataset):
+        X = X.to_dataarray(dim="variable")
+        dims.insert(0, "variable")
 
-        all_dims: list[str] = list(map(str, X.sizes.keys()))
-        if not all(dim in all_dims for dim in dims):
-            msg = (
-                f"Some dimensions {dims} are not present in the input array "
-                f"with dimensions {all_dims}."
-            )
-            raise ValueError(msg)
+    all_dims: list[str] = list(map(str, X.sizes.keys()))
+    if not all(dim in all_dims for dim in dims):
+        msg = (
+            f"Some dimensions {dims} are not present in the input array "
+            f"with dimensions {all_dims}."
+        )
+        raise ValueError(msg)
 
-        return X.stack(samples=dims)
+    return X.stack(samples=dims)
 
 
-class StandardScaler(ArrayPreprocessor):
+class StandardScaler:
     """Preprocessing class for scaling Xarray datasets or data arrays
     by removing the mean and optionally scaling by the standard deviation
     along a specified dimension.
@@ -89,9 +88,8 @@ class StandardScaler(ArrayPreprocessor):
         dim: str = "time",
         with_std: bool = False,
     ):
-        """
-        Scales the input xarray Dataset or DataArray by removing the mean
-        and optionally dividing by the standard deviation.
+        """Scales the input xarray Dataset or DataArray by removing
+        the mean and optionally dividing by the standard deviation.
 
         Parameters:
         -----------
