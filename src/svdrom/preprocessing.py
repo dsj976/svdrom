@@ -5,28 +5,38 @@ import xarray as xr
 
 
 class ArrayPreprocessor:
-    def spatial_stack(
+    def variable_spatial_stack(
         self, X: xr.Dataset | xr.DataArray, dims: Sequence[str]
-    ) -> xr.Dataset | xr.DataArray:
-        """Given an input array, create a single spatial dimension
-        by stacking multiple dimensions together. This operation is lazy.
+    ) -> xr.DataArray:
+        """Stack multiple dimensions of an input Xarray Dataset or
+        DataArray into a single new 'samples' dimension.
 
         Parameters
         ----------
-        X (xr.Dataset | xr.DataArray): the input array to stack.
+        X (xr.Dataset | xr.DataArray): the input data to stack.
         dims (Iterable[str]): the dimensions to stack together into a
-        single spatial dimension.
+        single spatial dimension (e.g. ('x', 'y') or ('lat', 'lon')).
 
         Returns
         -------
-        xr.Dataset | xr.DataArray: The array with the specified
-        dimensions stacked into a single spatial dimension.
+        xr.DataArray: The array with the specified dimensions stacked
+        into a single spatial dimension.
 
         Notes
         -----
-        This method preserves the data type of the input. If a DataArray is provided,
-        a DataArray is returned. If a Dataset is provided, a Dataset is returned.
+        If the input Xarray object is a Dataset containing multiple variables,
+        all variables will be stacked together along the new 'samples' dimension.
+        The resulting DataArray will have a 'samples' dimension that combines
+        the specified spatial dimensions (and the variable dimension if the input
+        was a Dataset).
+        The returned xarray object is Dask-backed and lazy if the input
+        is Dask-backed.
         """
+
+        dims = list(dims)
+        if isinstance(X, xr.Dataset):
+            X = X.to_dataarray(dim="variable")
+            dims.insert(0, "variable")
 
         all_dims: list[str] = list(map(str, X.sizes.keys()))
         if not all(dim in all_dims for dim in dims):
@@ -36,16 +46,7 @@ class ArrayPreprocessor:
             )
             raise ValueError(msg)
 
-        return X.stack(space=dims)
-
-    def variable_stack(self, X: xr.Dataset, variables: Sequence[str]):
-        """Given a xarray.Dataset containing multiple variables,
-        return a xarray.DataArray where the specified variables
-        have been stacked along the spatial dimension.
-
-        Not yet implemented.
-        """
-        return
+        return X.stack(samples=dims)
 
 
 class StandardScaler(ArrayPreprocessor):
