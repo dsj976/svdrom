@@ -6,7 +6,7 @@ import pytest
 import xarray as xr
 from make_test_data import DataGenerator
 
-from svdrom.io import DataHandler
+from svdrom.io import open_dataarray, open_dataset
 
 
 class TestDataHandler:
@@ -41,7 +41,6 @@ class TestDataHandler:
             os.path.dirname(os.path.abspath(__file__)), "test_data", "io"
         )
         cls.data_generator = DataGenerator()
-        cls.data_handler = DataHandler()
 
         # create clean directories
         if os.path.exists(cls.data_dir):
@@ -92,19 +91,19 @@ class TestDataHandler:
         ds_save(self.data_generator.ds, ds_path)
         da_save(self.data_generator.da, da_path)
 
-        self.data_handler.open_dataset(ds_path)
-        self.data_handler.open_dataarray(da_path)
+        ds = open_dataset(ds_path)
+        da = open_dataarray(da_path)
 
         assert isinstance(
-            self.data_handler.ds, xr.Dataset
-        ), f"Expected xarray.Dataset, got {type(self.data_handler.ds)}."
+            ds, xr.Dataset
+        ), f"Expected xarray.Dataset, got {type(ds).__name__}."
         assert isinstance(
-            self.data_handler.da, xr.DataArray
-        ), f"Expected xarray.DataArray, got {type(self.data_handler.da)}."
+            da, xr.DataArray
+        ), f"Expected xarray.DataArray, got {type(da).__name__}."
 
         assert self.data_generator.ds.equals(
-            self.data_handler.ds
+            ds
         ), f"Xarray Datasets should be equal for {filetype}."
         assert self.data_generator.da.equals(
-            self.data_handler.da
+            da
         ), f"Xarray DataArrays should be equal for {filetype}."
