@@ -82,7 +82,7 @@ class StandardScaler:
         """Whether data scaled to unit variance or not (read_only)."""
         return self._with_std
 
-    def scale(
+    def __call__(
         self,
         X: xr.Dataset | xr.DataArray,
         dim: str = "time",
