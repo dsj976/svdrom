@@ -72,7 +72,10 @@ def test_standard_scaler(X: xr.DataArray | xr.Dataset):
         assert isinstance(
             scaler.std, xr.DataArray
         ), f"Expected std to be a DataArray, got {type(scaler.std).__name__}."
-        xr.testing.assert_allclose(X, X_scaled * scaler.std + scaler.mean)
+        if scaler.with_std:
+            xr.testing.assert_allclose(X, X_scaled * scaler.std + scaler.mean)
+        else:
+            xr.testing.assert_allclose(X, X_scaled + scaler.mean)
     if isinstance(X, xr.Dataset):
         assert isinstance(
             X_scaled, xr.Dataset
@@ -83,4 +86,7 @@ def test_standard_scaler(X: xr.DataArray | xr.Dataset):
         assert isinstance(
             scaler.std, xr.Dataset
         ), f"Expected std to be a Dataset, got {type(scaler.std).__name__}."
-        xr.testing.assert_allclose(X, X_scaled * scaler.std + scaler.mean)
+        if scaler.with_std:
+            xr.testing.assert_allclose(X, X_scaled * scaler.std + scaler.mean)
+        else:
+            xr.testing.assert_allclose(X, X_scaled + scaler.mean)
