@@ -3,6 +3,10 @@ from collections.abc import Sequence
 import numpy as np
 import xarray as xr
 
+from svdrom.logger import setup_logger
+
+logger = setup_logger("Preprocessing", "preprocessing.log")
+
 
 def variable_spatial_stack(
     X: xr.Dataset | xr.DataArray, dims: Sequence[str]
@@ -34,6 +38,8 @@ def variable_spatial_stack(
 
     dims = list(dims)
     if isinstance(X, xr.Dataset):
+        msg = "Performing variable stacking."
+        logger.info(msg)
         X = X.to_dataarray(dim="variable")
         dims.insert(0, "variable")
 
@@ -43,8 +49,11 @@ def variable_spatial_stack(
             f"Some dimensions {dims} are not present in the input array "
             f"with dimensions {all_dims}."
         )
+        logger.exception(msg)
         raise ValueError(msg)
 
+    msg = "Performing spatial stacking."
+    logger.info(msg)
     return X.stack(samples=dims)
 
 
@@ -112,9 +121,17 @@ class StandardScaler:
         """
         self._with_std = with_std
         self._mean = X.mean(dim=dim)
+        msg = f"Computing mean along dimension {dim}..."
+        logger.info(msg)
         self._mean = self._mean.compute()
+        msg = "Finished computing mean."
+        logger.info(msg)
         if self._with_std:
             self._std = X.std(dim=dim)
+            msg = f"Computing std along dimension {dim}..."
+            logger.info(msg)
             self._std = self._std.compute()
+            msg = "Finished computing std."
+            logger.info(msg)
             return (X - self._mean) / self._std
         return X - self._mean
