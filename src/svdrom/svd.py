@@ -17,7 +17,6 @@ class SVD(ABC):
 
     Attributes
     ----------
-    X (dask.array.Array): The input data matrix.
     matrix_type (str): The type of the matrix based on its aspect ratio:
     "tall-and-skinny", "short-and-fat" or "square".
     n_components (int): number of SVD components
@@ -26,37 +25,31 @@ class SVD(ABC):
     v (dask.array.Array): right singular vectors
     """
 
-    def __init__(self, X: da.Array) -> None:
+    def __init__(self, n_components) -> None:
         """Initializes a SVD object.
 
         Parameters
         ----------
-        X (dask.array.Array): The input data matrix.
+        n_components (int): the desired number of SVD components.
         """
-        self._n_components = 0
+        self._n_components = n_components
         self._u = da.empty_like(0)
         self._s = np.empty_like(0)
         self._v = da.empty_like(0)
-        if X.ndim != 2:
-            msg = "The input array must be two-dimensional."
-            logger.exception(msg)
-            raise ValueError(msg)
-        self._X = X
         self._matrix_type = ""
-        self._check_matrix_type()
-        self._rechunk_array()
 
-    def _check_matrix_type(self, aspect_ratio=10):
+    def _check_matrix_type(self, X: da.Array, aspect_ratio=10):
         """Checks if input matrix is tall-and-skinny,
         short-and-fat or square/nearly-square, based on
         the specified aspect ratio.
 
         Parameters
         ----------
+        X (dask.array.Array): the input matrix.
         aspect_ratio (int): defines the matrix type based on the
         ratio between number of rows and columns. Defaults to 10.
         """
-        n_rows, n_cols = self._X.shape
+        n_rows, n_cols = X.shape
         if (n_rows // n_cols) >= aspect_ratio:
             self._matrix_type = "tall-and-skinny"
         elif (n_cols // n_rows) >= aspect_ratio:
@@ -64,7 +57,7 @@ class SVD(ABC):
         else:
             self._matrix_type = "square"
 
-    def _rechunk_array(self):
+    def _rechunk_array(self, X: da.Array) -> da.Array:
         """Rechunks the input array to ensure optimal chunk sizes
         for SVD computation based on matrix type.
         """
@@ -72,18 +65,13 @@ class SVD(ABC):
             "Will need to rechunk the array before fitting the SVD. "
             "This will add some overhead."
         )
-        if (
-            self._matrix_type == "tall-and-skinny"
-            and self._X.shape[1] != self._X.chunksize[1]
-        ):
+        if self._matrix_type == "tall-and-skinny" and X.shape[1] != X.chunksize[1]:
             logger.info(msg)
-            self._X = self._X.rechunk({0: "auto", 1: -1})
-        if (
-            self._matrix_type == "short-and-fat"
-            and self._X.shape[0] != self._X.chunksize[0]
-        ):
+            return X.rechunk({0: "auto", 1: -1})
+        if self._matrix_type == "short-and-fat" and X.shape[0] != X.chunksize[0]:
             logger.info(msg)
-            self._X = self._X.rechunk({0: -1, 1: "auto"})
+            return X.rechunk({0: -1, 1: "auto"})
+        return X
 
     @property
     def n_components(self) -> int:
@@ -106,22 +94,17 @@ class SVD(ABC):
         return self._v
 
     @property
-    def X(self) -> da.Array:
-        """Input matrix (read-only)."""
-        return self._X
-
-    @property
     def matrix_type(self) -> str:
         """Matrix type, based on aspect radio (read-only)."""
         return self._matrix_type
 
     @abstractmethod
-    def fit(self, n_components: int, transform: bool = False, **kwargs):
+    def fit(self, X: da.Array, transform: bool = False, **kwargs):
         """Perform the SVD fit operation.
 
         Parameters
         ----------
-        n_components (int): number of SVD components to keep.
+        X (da.Array): the array to decompose. Must be 2D.
         transform (bool): whether to compute `u` for a tall-and-skinny
         matrix or `v` for a short-and-fat matrix, since these can be much
         larger than the other SVD results. Defaults to False.
@@ -129,11 +112,13 @@ class SVD(ABC):
         """
 
     @abstractmethod
-    def transform(
-        self,
-    ):
+    def transform(self, X: da.Array):
         """Compute `u` for a tall-and-skinny matrix or `v` for a
-        short-and-fat matrix if you have called `fit` with `transform=False`.
+        short-and-fat matrix if you have called `fit()` with `transform=False`.
+
+        Parameters
+        ----------
+        X (da.Array): the array to transform. Must be 2D.
         """
 
 
