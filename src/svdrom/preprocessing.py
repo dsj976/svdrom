@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 
-import numpy as np
 import xarray as xr
 
 from svdrom.logger import setup_logger
@@ -72,17 +71,17 @@ class StandardScaler:
     """
 
     def __init__(self):
-        self._mean = xr.DataArray(np.zeros_like(0))
-        self._std = xr.DataArray(np.zeros_like(0))
+        self._mean = None
+        self._std = None
         self._with_std = False
 
     @property
-    def mean(self) -> xr.DataArray | xr.Dataset:
+    def mean(self) -> xr.DataArray | xr.Dataset | None:
         """Mean (read-only)."""
         return self._mean
 
     @property
-    def std(self) -> xr.DataArray | xr.Dataset:
+    def std(self) -> xr.DataArray | xr.Dataset | None:
         """Standard deviation (read-only)."""
         return self._std
 
