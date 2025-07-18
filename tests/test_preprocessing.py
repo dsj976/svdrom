@@ -45,16 +45,11 @@ def test_variable_spatial_stack(X: xr.DataArray | xr.Dataset):
 
     # check that by unstacking we can recover the original
     X_unstacked = X_stacked.unstack()
-    X = X.transpose("x", "y", "z", "time")
     if isinstance(X, xr.DataArray):
-        X_unstacked = X_unstacked.transpose("x", "y", "z", "time")
-        assert X.equals(
-            X_unstacked
-        ), "Unstacking should recover the original DataArray."
+        xr.testing.assert_allclose(X, X_unstacked, check_dim_order=False)
     if isinstance(X, xr.Dataset):
-        X_unstacked = X_unstacked.transpose("x", "y", "z", "time", "variable")
         X_unstacked = X_unstacked.to_dataset(dim="variable")
-        assert X.equals(X_unstacked), "Unstacking should recover the original Dataset."
+        xr.testing.assert_allclose(X, X_unstacked, check_dim_order=False)
 
 
 @pytest.mark.parametrize("X", [generator.da, generator.ds])
