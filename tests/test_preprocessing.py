@@ -2,7 +2,7 @@ import pytest
 import xarray as xr
 from make_test_data import DataGenerator
 
-from svdrom.preprocessing import variable_spatial_stack
+from svdrom.preprocessing import StandardScaler, variable_spatial_stack
 
 generator = DataGenerator()
 generator.generate_dataarray()
@@ -55,3 +55,37 @@ def test_variable_spatial_stack(X: xr.DataArray | xr.Dataset):
         X_unstacked = X_unstacked.transpose("x", "y", "z", "time", "variable")
         X_unstacked = X_unstacked.to_dataset(dim="variable")
         assert X.equals(X_unstacked), "Unstacking should recover the original Dataset."
+
+
+@pytest.mark.parametrize("X", [generator.da, generator.ds])
+def test_standard_scaler(X: xr.DataArray | xr.Dataset):
+    """Test for the StandardScaler class."""
+    scaler = StandardScaler()
+    X_scaled = scaler(X, with_std=True)
+
+    assert hasattr(scaler, "mean")
+    assert hasattr(scaler, "std")
+    assert hasattr(scaler, "with_std")
+
+    if isinstance(X, xr.DataArray):
+        assert isinstance(
+            X_scaled, xr.DataArray
+        ), f"Expected a DataArray after scaling, got {type(X_scaled).__name__}."
+        assert isinstance(
+            scaler.mean, xr.DataArray
+        ), f"Expected mean to be a DataArray, got {type(scaler.mean).__name__}."
+        assert isinstance(
+            scaler.std, xr.DataArray
+        ), f"Expected std to be a DataArray, got {type(scaler.std).__name__}."
+        xr.testing.assert_allclose(X, X_scaled * scaler.std + scaler.mean)
+    if isinstance(X, xr.Dataset):
+        assert isinstance(
+            X_scaled, xr.Dataset
+        ), f"Expected a Dataset after scaling, got {type(X_scaled).__name__}."
+        assert isinstance(
+            scaler.mean, xr.Dataset
+        ), f"Expected mean to be a Dataset, got {type(scaler.mean).__name__}."
+        assert isinstance(
+            scaler.std, xr.Dataset
+        ), f"Expected std to be a Dataset, got {type(scaler.std).__name__}."
+        xr.testing.assert_allclose(X, X_scaled * scaler.std + scaler.mean)
