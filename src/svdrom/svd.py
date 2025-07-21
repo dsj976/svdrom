@@ -12,11 +12,17 @@ class TruncatedSVD:
         self,
         n_components: int,
         algorithm: str = "tsqr",
+        compute_u: bool = True,
+        compute_v: bool = True,
+        compute_var_ratio: bool = False,
         rechunk: bool = True,
         aspect_ratio: int = 10,
     ):
         self._n_components = n_components
         self._algorithm = algorithm
+        self._compute_u = compute_u
+        self._compute_v = compute_v
+        self._compute_var_ratio = compute_var_ratio
         self._rechunk = rechunk
         self._aspect_ratio = aspect_ratio
         self._u: xr.DataArray | None = None
@@ -48,6 +54,31 @@ class TruncatedSVD:
     def matrix_type(self):
         """Matrix type, based on aspect radio (read-only)."""
         return self._matrix_type
+
+    @property
+    def compute_u(self):
+        """Whether to compute left singular vectors (read-only)."""
+        return self._compute_u
+
+    @property
+    def compute_v(self):
+        """Whether to compute right singular vectors (read-only)."""
+        return self._compute_v
+
+    @property
+    def compute_var_ratio(self):
+        """Whether to compute the ratio of explained variance (read-only)."""
+        return self._compute_var_ratio
+
+    @property
+    def aspect_ratio(self):
+        """Aspect ratio used to determine matrix type (read-only)."""
+        return self._aspect_ratio
+
+    @property
+    def rechunk(self):
+        """Whether to rechunk the input array before fitting (read-only)."""
+        return self._rechunk
 
     def _check_matrix_type(self, X: da.Array):
         """Checks if input matrix is tall-and-skinny,
@@ -82,9 +113,6 @@ class TruncatedSVD:
     def fit(
         self,
         X: xr.DataArray,
-        compute_u: bool = True,
-        compute_v: bool = True,
-        compute_var_ratio: bool = False,
     ):
         pass
 
