@@ -80,6 +80,11 @@ class TruncatedSVD:
         """Whether to rechunk the input array before fitting (read-only)."""
         return self._rechunk
 
+    @property
+    def algorithm(self):
+        """SVD algorithm to use (read-only)."""
+        return self._algorithm
+
     def _check_matrix_type(self, X: da.Array):
         """Checks if input matrix is tall-and-skinny,
         short-and-fat or square/nearly-square, based on
