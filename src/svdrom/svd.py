@@ -115,11 +115,41 @@ class TruncatedSVD:
             return X.rechunk({0: -1, 1: "auto"})
         return X
 
+    def _check_array(self, X: xr.DataArray):
+        if X.ndim != 2:
+            msg = (
+                "The input array must be 2-dimensional. "
+                f"Got a {X.ndim}-dimensional array."
+            )
+            logger.exception(msg)
+            raise ValueError(msg)
+        if self._n_components >= X.shape[1]:
+            msg = (
+                "n_components must be less than n_features. "
+                f"Got n_components: {self.n_components}, n_features: {X.shape[1]}."
+            )
+            logger.exception(msg)
+            raise ValueError(msg)
+        if not isinstance(X.data, da.Array):
+            msg = (
+                f"The {self.__class__.__name__} class only supports Dask-backed "
+                f"Xarray DataArrays. Got {type(X.data)} instead."
+            )
+            logger.exception(msg)
+            raise TypeError(msg)
+
     def fit(
         self,
         X: xr.DataArray,
     ):
-        pass
+        self._check_array(X)
+        if self._algorithm not in ["tsqr", "randomized"]:
+            msg = (
+                f"Unsupported algorithm: {self._algorithm}. "
+                "Supported algorithms are 'tsqr' and 'randomized'."
+            )
+            logger.exception(msg)
+            raise ValueError(msg)
 
     def transform(self, X: xr.DataArray):
         pass
