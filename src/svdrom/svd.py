@@ -19,10 +19,35 @@ class TruncatedSVD:
         self._algorithm = algorithm
         self._rechunk = rechunk
         self._aspect_ratio = aspect_ratio
-        self._u = xr.DataArray | None
-        self._s = np.ndarray | None
-        self._v = xr.DataArray | None
+        self._u: xr.DataArray | None = None
+        self._s: np.ndarray | None = None
+        self._v: xr.DataArray | None = None
         self._matrix_type: str | None = None
+
+    @property
+    def n_components(self) -> int:
+        """Number of SVD components (read-only)."""
+        return self._n_components
+
+    @property
+    def s(self):
+        """Singular values (read-only)."""
+        return self._s
+
+    @property
+    def u(self):
+        """Left singular vectors (read-only)."""
+        return self._u
+
+    @property
+    def v(self):
+        """Right singular vectors (read-only)."""
+        return self._v
+
+    @property
+    def matrix_type(self):
+        """Matrix type, based on aspect radio (read-only)."""
+        return self._matrix_type
 
     def _check_matrix_type(self, X: da.Array):
         """Checks if input matrix is tall-and-skinny,
