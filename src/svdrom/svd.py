@@ -272,5 +272,40 @@ class TruncatedSVD:
         logger.info(msg)
         self._v = self._singular_vectors_to_dataarray(v, X)
 
-    def transform(self, X: xr.DataArray):
-        pass
+    def transform(self, X: xr.DataArray) -> xr.DataArray:
+        """Transform the input array using the computed right singular vectors.
+
+        Parameters
+        ----------
+        X (xarray.DataArray): the array to be transformed, which must have the same
+            number of features as the original array on which SVD was fitted.
+
+        Returns
+        -------
+        xarray.DataArray: the transformed array.
+        """
+
+        if not isinstance(self._v, xr.DataArray):
+            msg = (
+                "Computed right singular vectors are "
+                "required in order to call transform()."
+            )
+            logger.exception(msg)
+            raise ValueError(msg)
+        X_da = X.data
+        try:
+            msg = "Computing transformation..."
+            logger.info(msg)
+            X_da_transformed = X_da.dot(self._v.data.T)
+            X_da_transformed = X_da_transformed.compute()
+            msg = "Done."
+            logger.info(msg)
+        except ValueError as e:
+            msg = (
+                "Cannot transform the input array with the computed right "
+                "singular vectors. Ensure that the input array has the same "
+                "number of features as the original array on which SVD was fitted."
+            )
+            logger.exception(msg)
+            raise ValueError(msg) from e
+        return self._singular_vectors_to_dataarray(X_da_transformed, X)
