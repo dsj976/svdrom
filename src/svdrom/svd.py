@@ -231,12 +231,18 @@ class TruncatedSVD:
         idx = 1
         if self._compute_u:
             u = computed[idx]
+            u = self._singular_vectors_to_dataarray(u, X)
             idx += 1
         if self._compute_v:
             v = computed[idx]
+            v = self._singular_vectors_to_dataarray(v, X)
             idx += 1
         if self._compute_var_ratio:
             explained_var_ratio = computed[idx]
+        self._u = u
+        self._s = s
+        self._v = v
+        self._explained_var_ratio = explained_var_ratio
 
     def transform(self, X: xr.DataArray):
         pass
