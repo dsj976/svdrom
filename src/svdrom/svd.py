@@ -139,6 +139,37 @@ class TruncatedSVD:
             logger.exception(msg)
             raise TypeError(msg)
 
+    def _to_dataarray(
+        self, singular_vectors: np.ndarray, X: xr.DataArray
+    ) -> xr.DataArray:
+        """Transform the singular vectors into a Xarray DataArray following
+        the dimensions and coordinates of the DataArray on which SVD was
+        performed. The function automatically identifies whether the input
+        singular vectors are left or right singular vectors.
+        """
+        if singular_vectors.shape[0] == X.shape[0]:
+            # this corresponds to `u`: replace second dimension (e.g. 'time')
+            old_dims = list(X.dims)
+            new_dims = [old_dims[0], "components"]
+            coords = {k: v for k, v in X.coords.items() if k != old_dims[1]}
+            coords["components"] = np.arange(singular_vectors.shape[1])
+            name = "svd_u"
+        elif singular_vectors.shape[1] == X.shape[1]:
+            # this corresponds to `v`: replace first dimension (e.g. 'samples')
+            old_dims = list(X.dims)
+            new_dims = ["components", old_dims[1]]
+            coords = {k: v for k, v in X.coords.items() if k != old_dims[0]}
+            coords["components"] = np.arange(singular_vectors.shape[0])
+            name = "svd_v"
+        else:
+            msg = (
+                "Cannot transform singular vectors into Xarray DataArray. "
+                "Shape of singular_vectors does not match X."
+            )
+            logger.exception(msg)
+            raise ValueError(msg)
+        return xr.DataArray(singular_vectors, dims=new_dims, coords=coords, name=name)
+
     def fit(
         self,
         X: xr.DataArray,
