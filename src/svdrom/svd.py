@@ -1,3 +1,4 @@
+import dask
 import dask.array as da
 import numpy as np
 import xarray as xr
@@ -98,7 +99,7 @@ class TruncatedSVD:
         else:
             self._matrix_type = "square"
 
-    def _rechunk_array(self, X: da.Array):
+    def _rechunk_array(self, X: da.Array) -> da.Array:
         """Rechunks the input array to ensure optimal chunk sizes
         for SVD computation based on matrix type.
         """
@@ -141,8 +142,8 @@ class TruncatedSVD:
     def fit(
         self,
         X: xr.DataArray,
+        **kwargs,
     ):
-        self._check_array(X)
         if self._algorithm not in ["tsqr", "randomized"]:
             msg = (
                 f"Unsupported algorithm: {self._algorithm}. "
@@ -150,6 +151,55 @@ class TruncatedSVD:
             )
             logger.exception(msg)
             raise ValueError(msg)
+
+        self._check_array(X)
+        X_da = X.data
+        X_da = self._rechunk_array(X_da) if self._rechunk else X_da
+
+        if self._algorithm == "tsqr":
+            msg = "Will use TSQR algorithm."
+            logger.info(msg)
+            u, s, v = da.linalg.svd(X_da)  # employs tsqr internally
+            u = u[:, : self._n_components]
+            s = s[: self._n_components]
+            v = v[: self._n_components]
+        else:
+            msg = "Will use randomized algorithm."
+            logger.info(msg)
+            u, s, v = da.linalg.svd_compressed(X_da, self._n_components, **kwargs)
+
+        X_da_transformed = u * s
+        explained_var = X_da_transformed.var(axis=0)
+        full_var = X_da.var(axis=0).sum()
+        explained_var_ratio = explained_var / full_var
+
+        results = []
+        results.append(s)
+
+        if self._compute_u:
+            results.append(u)
+        if self._compute_v:
+            results.append(v)
+        if self._compute_var_ratio:
+            results.append(explained_var_ratio)
+
+        # compute all Dask collections at once
+        msg = "Computing SVD results..."
+        logger.info(msg)
+        computed = dask.compute(*results)
+        msg = "Done."
+        logger.info(msg)
+
+        s = computed[0]
+        idx = 1
+        if self._compute_u:
+            u = computed[idx]
+            idx += 1
+        if self._compute_v:
+            v = computed[idx]
+            idx += 1
+        if self._compute_var_ratio:
+            explained_var_ratio = computed[idx]
 
     def transform(self, X: xr.DataArray):
         pass
