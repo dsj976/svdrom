@@ -29,6 +29,7 @@ class TruncatedSVD:
         self._u: xr.DataArray | None = None
         self._s: np.ndarray | None = None
         self._v: xr.DataArray | None = None
+        self._explained_var_ratio: float | None = None
         self._matrix_type: str | None = None
 
     @property
@@ -50,6 +51,11 @@ class TruncatedSVD:
     def v(self):
         """Right singular vectors (read-only)."""
         return self._v
+
+    @property
+    def explained_var_ratio(self):
+        """Ratio of explained variance (read-only)."""
+        return self._explained_var_ratio
 
     @property
     def matrix_type(self):
