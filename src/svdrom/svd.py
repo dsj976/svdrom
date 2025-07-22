@@ -145,7 +145,7 @@ class TruncatedSVD:
             logger.exception(msg)
             raise TypeError(msg)
 
-    def _to_dataarray(
+    def _singular_vectors_to_dataarray(
         self, singular_vectors: np.ndarray, X: xr.DataArray
     ) -> xr.DataArray:
         """Transform the singular vectors into a Xarray DataArray following
