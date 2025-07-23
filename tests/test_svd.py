@@ -6,17 +6,30 @@ import xarray as xr
 from svdrom.svd import TruncatedSVD
 
 
-def make_dataarray(n_rows, n_cols):
-    X = da.random.random((n_rows, n_cols), chunks="auto").astype("float32")
-    coords = {"samples": np.arange(n_rows), "time": np.arange(n_cols)}
+def make_dataarray(matrix_type: str) -> xr.DataArray:
+    if matrix_type == "tall-and-skinny":
+        n_samples = 10_000
+        n_features = 100
+    elif matrix_type == "short-and-fat":
+        n_samples = 100
+        n_features = 10_000
+    elif matrix_type == "square":
+        n_samples = 1_000
+        n_features = 1_000
+    else:
+        msg = (
+            "Matrix type not supported. "
+            "Must be one of: tall-and-skinny, short-and-fat, square."
+        )
+        raise ValueError(msg)
+    X = da.random.random((n_samples, n_features), chunks="auto").astype("float32")
+    coords = {"samples": np.arange(n_samples), "time": np.arange(n_features)}
     dims = list(coords.keys())
     return xr.DataArray(X, dims=dims, coords=coords)
 
 
 @pytest.mark.parametrize("algorithm", ["tsqr", "randomized"])
 def test_basic(algorithm):
-    n_samples = 10_000
-    n_features = 100
     n_components = 10
     tsvd = TruncatedSVD(
         n_components=n_components,
@@ -35,7 +48,8 @@ def test_basic(algorithm):
     for attr in expected_attrs:
         assert hasattr(tsvd, attr), f"TruncatedSVD should have attribute '{attr}'."
 
-    X = make_dataarray(n_samples, n_features)
+    X = make_dataarray("tall-and-skinny")
+    n_samples, n_features = X.shape
     tsvd.fit(X)
     assert isinstance(
         tsvd.u, xr.DataArray
