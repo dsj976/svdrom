@@ -10,19 +10,27 @@ def make_dataarray(matrix_type: str) -> xr.DataArray:
     if matrix_type == "tall-and-skinny":
         n_samples = 10_000
         n_features = 100
+        X = da.random.random(
+            (n_samples, n_features), chunks=(-1, int(n_features / 2))
+        ).astype("float32")
     elif matrix_type == "short-and-fat":
         n_samples = 100
         n_features = 10_000
+        X = da.random.random(
+            (n_samples, n_features), chunks=(int(n_samples / 2), -1)
+        ).astype("float32")
     elif matrix_type == "square":
         n_samples = 1_000
         n_features = 1_000
+        X = da.random.random(
+            (n_samples, n_features), chunks=(int(n_samples / 2), int(n_features / 2))
+        ).astype("float32")
     else:
         msg = (
             "Matrix type not supported. "
             "Must be one of: tall-and-skinny, short-and-fat, square."
         )
         raise ValueError(msg)
-    X = da.random.random((n_samples, n_features), chunks="auto").astype("float32")
     coords = {"samples": np.arange(n_samples), "time": np.arange(n_features)}
     dims = list(coords.keys())
     return xr.DataArray(X, dims=dims, coords=coords)
@@ -35,14 +43,12 @@ def test_basic(algorithm):
         n_components=n_components,
         algorithm=algorithm,
         compute_var_ratio=True,
-        rechunk=False,
     )
     expected_attrs = (
         "u",
         "s",
         "v",
         "explained_var_ratio",
-        "matrix_type",
         "aspect_ratio",
     )
     for attr in expected_attrs:
