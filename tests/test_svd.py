@@ -85,3 +85,15 @@ def test_basic(algorithm):
         f"Shape of explained_var_ratio should be ({n_components},), "
         f"got {tsvd.explained_var_ratio.shape}."
     )
+
+
+@pytest.mark.parametrize("matrix_type", ["tall-and-skinny", "short-and-fat", "square"])
+@pytest.mark.parametrize("algorithm", ["tsqr", "randomized"])
+def test_matrix_types(matrix_type, algorithm):
+    X = make_dataarray(matrix_type)
+    n_components = 10
+    tsvd = TruncatedSVD(
+        n_components=n_components,
+        algorithm=algorithm,
+    )
+    tsvd.fit(X)
