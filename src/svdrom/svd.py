@@ -73,8 +73,9 @@ class TruncatedSVD:
 
     def _rechunk_array(self, X: da.Array) -> da.Array:
         """Rechunks the input array to ensure optimal chunk sizes
-        for SVD computation based on array shape. This is a requirement
-        for TSQR but not for Randomized SVD.
+        for SVD computation based on array shape. Dask's `svd()` algorithm
+        can only handle chunking in one direction, whereas the `svd_compressed()`
+        algorithm can handle chunking in both directions.
         """
         nb = X.numblocks
         msg = (
@@ -85,11 +86,15 @@ class TruncatedSVD:
         if nr > nc and nb[1] > 1:
             msg = "The input array is considered tall-and-skinny. " + msg
             logger.info(msg)
-            return X.rechunk({0: "auto", 1: -1})
+            return X.rechunk({0: "auto", 1: -1})  # -1 means "all in one chunk"
         if nr < nc and nb[0] > 1:
             msg = "The input array is considered short-and-fat. " + msg
             logger.info(msg)
             return X.rechunk({0: -1, 1: "auto"})
+        if nr == nc and not (nb[0] == 1 or nb[1] == 1):
+            msg = "The input array is square. " + msg
+            logger.info(msg)
+            return X.rechunk({0: "auto", 1: -1})
         return X
 
     def _check_array(self, X: xr.DataArray):
