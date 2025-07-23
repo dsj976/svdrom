@@ -46,6 +46,10 @@ def test_basic(algorithm):
     assert isinstance(
         tsvd.s, np.ndarray
     ), f"s should be a numpy ndarray, got {type(tsvd.s)}."
+    assert isinstance(tsvd.explained_var_ratio, np.ndarray), (
+        "explained_var_ratio should be a numpy ndarray, "
+        f"got {type(tsvd.explained_var_ratio)}."
+    )
     assert tsvd.u.shape == (
         X.shape[0],
         n_components,
@@ -57,3 +61,7 @@ def test_basic(algorithm):
     assert tsvd.s.shape == (
         n_components,
     ), f"Shape of s should be ({n_components},), got {tsvd.s.shape}."
+    assert tsvd.explained_var_ratio.shape == (n_components,), (
+        f"Shape of explained_var_ratio should be ({n_components},), "
+        f"got {tsvd.explained_var_ratio.shape}."
+    )

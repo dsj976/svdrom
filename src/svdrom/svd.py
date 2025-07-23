@@ -29,7 +29,7 @@ class TruncatedSVD:
         self._u: xr.DataArray | da.Array | None = None
         self._s: np.ndarray | None = None
         self._v: xr.DataArray | da.Array | None = None
-        self._explained_var_ratio: float | None = None
+        self._explained_var_ratio: np.ndarray | None = None
         self._matrix_type: str | None = None
 
     @property
