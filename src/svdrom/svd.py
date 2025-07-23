@@ -30,7 +30,6 @@ class TruncatedSVD:
         self._s: np.ndarray | None = None
         self._v: xr.DataArray | da.Array | None = None
         self._explained_var_ratio: np.ndarray | None = None
-        self._matrix_type: str | None = None
 
     @property
     def n_components(self) -> int:
@@ -58,11 +57,6 @@ class TruncatedSVD:
         return self._explained_var_ratio
 
     @property
-    def matrix_type(self):
-        """Matrix type, based on aspect radio (read-only)."""
-        return self._matrix_type
-
-    @property
     def compute_var_ratio(self):
         """Whether to compute the ratio of explained variance (read-only)."""
         return self._compute_var_ratio
@@ -73,41 +67,27 @@ class TruncatedSVD:
         return self._aspect_ratio
 
     @property
-    def rechunk(self):
-        """Whether to rechunk the input array before fitting (read-only)."""
-        return self._rechunk
-
-    @property
     def algorithm(self):
         """SVD algorithm to use (read-only)."""
         return self._algorithm
 
-    def _check_matrix_type(self, X: da.Array):
-        """Checks if input matrix is tall-and-skinny,
-        short-and-fat or square/nearly-square, based on
-        the specified aspect ratio.
-        """
-        n_rows, n_cols = X.shape
-        if (n_rows // n_cols) >= self._aspect_ratio:
-            self._matrix_type = "tall-and-skinny"
-        elif (n_cols // n_rows) >= self._aspect_ratio:
-            self._matrix_type = "short-and-fat"
-        else:
-            self._matrix_type = "square"
-
     def _rechunk_array(self, X: da.Array) -> da.Array:
         """Rechunks the input array to ensure optimal chunk sizes
-        for SVD computation based on matrix type.
+        for SVD computation based on array shape. This is a requirement
+        for TSQR but not for Randomized SVD.
         """
         nb = X.numblocks
         msg = (
             "Will rechunk the array before fitting the SVD. "
             "This will add some overhead."
         )
-        if self._matrix_type == "tall-and-skinny" and X.shape[1] != nb[1]:
+        nr, nc = X.shape
+        if nr > nc and nb[1] > 1:
+            msg = "The input array is considered tall-and-skinny. " + msg
             logger.info(msg)
             return X.rechunk({0: "auto", 1: -1})
-        if self._matrix_type == "short-and-fat" and X.shape[0] != nb[0]:
+        if nr < nc and nb[0] > 1:
+            msg = "The input array is considered short-and-fat. " + msg
             logger.info(msg)
             return X.rechunk({0: -1, 1: "auto"})
         return X
@@ -181,11 +161,11 @@ class TruncatedSVD:
 
         self._check_array(X)
         X_da = X.data
-        X_da = self._rechunk_array(X_da) if self._rechunk else X_da
 
         if self._algorithm == "tsqr":
             msg = "Will use TSQR algorithm."
             logger.info(msg)
+            X_da = self._rechunk_array(X_da)
             u, s, v = da.linalg.svd(X_da)  # employs tsqr internally
             u = u[:, : self._n_components]
             s = s[: self._n_components]
@@ -193,6 +173,7 @@ class TruncatedSVD:
         else:
             msg = "Will use randomized algorithm."
             logger.info(msg)
+            X_da = self._rechunk_array(X_da) if self._rechunk else X_da
             u, s, v = da.linalg.svd_compressed(X_da, self._n_components, **kwargs)
 
         X_da_transformed = u * s
