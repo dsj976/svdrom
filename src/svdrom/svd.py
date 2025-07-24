@@ -72,7 +72,7 @@ class TruncatedSVD:
         self._u: xr.DataArray | None = None
         self._s: np.ndarray | None = None
         self._v: xr.DataArray | None = None
-        self._explained_var_ratio: np.ndarray | None = None
+        self._explained_var_ratio: np.ndarray | da.Array | None = None
 
     @property
     def n_components(self) -> int:
@@ -98,11 +98,6 @@ class TruncatedSVD:
     def explained_var_ratio(self):
         """Ratio of explained variance (read-only)."""
         return self._explained_var_ratio
-
-    @property
-    def compute_var_ratio(self):
-        """Whether to compute the ratio of explained variance (read-only)."""
-        return self._compute_var_ratio
 
     @property
     def algorithm(self):
@@ -281,6 +276,21 @@ class TruncatedSVD:
         msg = "Computing right singular vectors..."
         logger.info(msg)
         self._v = self._v.compute()
+        msg = "Done."
+        logger.info(msg)
+
+    def compute_var_ratio(self) -> None:
+        """Compute the ratio of explained variance if it is
+        still a lazy Dask collection.
+        """
+        if self._explained_var_ratio is None:
+            msg = "You must call fit() before calling compute_var_ratio()."
+            logger.exception(msg)
+            raise ValueError(msg)
+        msg = "Computing explained variance ratio..."
+        logger.info(msg)
+        if isinstance(self._explained_var_ratio, da.Array):
+            self._explained_var_ratio = self._explained_var_ratio.compute()
         msg = "Done."
         logger.info(msg)
 
