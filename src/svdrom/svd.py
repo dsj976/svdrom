@@ -16,7 +16,7 @@ class TruncatedSVD:
         compute_u: bool = True,
         compute_v: bool = True,
         compute_var_ratio: bool = False,
-        rechunk: bool = True,
+        rechunk: bool = False,
         aspect_ratio: int = 10,
     ):
         self._n_components = n_components
