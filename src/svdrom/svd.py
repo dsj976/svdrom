@@ -69,9 +69,9 @@ class TruncatedSVD:
         self._compute_v = compute_v
         self._compute_var_ratio = compute_var_ratio
         self._rechunk = rechunk
-        self._u: xr.DataArray | da.Array | None = None
+        self._u: xr.DataArray | None = None
         self._s: np.ndarray | None = None
-        self._v: xr.DataArray | da.Array | None = None
+        self._v: xr.DataArray | None = None
         self._explained_var_ratio: np.ndarray | None = None
 
     @property
@@ -245,26 +245,20 @@ class TruncatedSVD:
         idx = 1
         if self._compute_u:
             u = computed[idx]
-            u = self._singular_vectors_to_dataarray(u, X)
             idx += 1
         if self._compute_v:
             v = computed[idx]
-            v = self._singular_vectors_to_dataarray(v, X)
             idx += 1
         if self._compute_var_ratio:
             explained_var_ratio = computed[idx]
-        self._u = u
+        self._u = self._singular_vectors_to_dataarray(u, X)
         self._s = s
-        self._v = v
+        self._v = self._singular_vectors_to_dataarray(v, X)
         self._explained_var_ratio = explained_var_ratio
 
-    def compute_u(self, X: xr.DataArray) -> None:
+    def compute_u(self) -> None:
         """Compute left singular vectors if they are
         still a lazy Dask collection.
-
-        Parameters
-        ----------
-        X (xarray.DataArray): the array on which the SVD was fitted.
         """
         if self._u is None:
             msg = "You must call fit() before calling compute_u()."
@@ -272,18 +266,13 @@ class TruncatedSVD:
             raise ValueError(msg)
         msg = "Computing left singular vectors..."
         logger.info(msg)
-        u = self._u.compute()
+        self._u = self._u.compute()
         msg = "Done."
         logger.info(msg)
-        self._u = self._singular_vectors_to_dataarray(u, X)
 
-    def compute_v(self, X: xr.DataArray) -> None:
+    def compute_v(self) -> None:
         """Compute right singular vectors if they are
         still a lazy Dask collection.
-
-        Parameters
-        ----------
-        X (xarray.DataArray): the array on which the SVD was fitted.
         """
         if self._v is None:
             msg = "You must call fit() before calling compute_v()."
@@ -291,10 +280,9 @@ class TruncatedSVD:
             raise ValueError(msg)
         msg = "Computing right singular vectors..."
         logger.info(msg)
-        v = self._v.compute()
+        self._v = self._v.compute()
         msg = "Done."
         logger.info(msg)
-        self._v = self._singular_vectors_to_dataarray(v, X)
 
     def transform(self, X: xr.DataArray) -> xr.DataArray:
         """Transform the input array using the computed right singular vectors.
