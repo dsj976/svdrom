@@ -152,6 +152,7 @@ class TruncatedSVD:
         return X
 
     def _check_array(self, X: xr.DataArray):
+        """Checks if the input array is valid for SVD computation."""
         if X.ndim != 2:
             msg = (
                 "The input array must be 2-dimensional. "
@@ -210,6 +211,17 @@ class TruncatedSVD:
         X: xr.DataArray,
         **kwargs,
     ) -> None:
+        """Fit the SVD model to the input array.
+
+        Parameters
+        ----------
+        X: (xarray.DataArray), shape (n_samples, n_features)
+            The input array to fit the SVD model on.
+        **kwargs:
+            Additional keyword arguments to pass to the
+            randomized SVD algorithm. See
+            `dask.array.linalg.svd_compressed` for more details.
+        """
         if self._algorithm not in ["tsqr", "randomized"]:
             msg = (
                 f"Unsupported algorithm: {self._algorithm}. "
@@ -320,7 +332,8 @@ class TruncatedSVD:
 
         Parameters
         ----------
-        X (xarray.DataArray): the array to be transformed, which must have the same
+        X: (xarray.DataArray), shape (n_samples, n_features)
+            the array to be transformed, which must have the same
             number of features as the original array on which SVD was fitted.
 
         Returns
