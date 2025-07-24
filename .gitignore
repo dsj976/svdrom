@@ -159,3 +159,6 @@ Thumbs.db
 # Common editor files
 *~
 *.swp
+
+# VS Code
+.vscode/

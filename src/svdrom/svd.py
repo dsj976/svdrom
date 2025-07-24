@@ -1,89 +1,99 @@
-from abc import ABC, abstractmethod
-
+import dask
 import dask.array as da
 import numpy as np
-from dask import persist
-from dask_ml.decomposition import TruncatedSVD as tsvd
+import xarray as xr
 
 from svdrom.logger import setup_logger
 
 logger = setup_logger("SVD", "svd.log")
 
 
-class SVD(ABC):
-    """Abstract base class for performing Singular Value Decomposition (SVD) on a
-    two-dimensional Dask array. The array is rechunked automatically for an optimized
-    SVD computation.
+class TruncatedSVD:
+    def __init__(
+        self,
+        n_components: int,
+        algorithm: str = "tsqr",
+        compute_u: bool = True,
+        compute_v: bool = True,
+        compute_var_ratio: bool = False,
+        rechunk: bool = False,
+    ):
+        """Linear dimensionality reduction using truncated
+        Singular Value Decomposition (SVD).
 
-    Attributes
-    ----------
-    X (dask.array.Array): The input data matrix.
-    matrix_type (str): The type of the matrix based on its aspect ratio:
-    "tall-and-skinny", "short-and-fat" or "square".
-    n_components (int): number of SVD components
-    u (dask.array.Array): left singular vectors
-    s (numpy.ndarray): singular values
-    v (dask.array.Array): right singular vectors
-    """
-
-    def __init__(self, X: da.Array) -> None:
-        """Initializes a SVD object.
+        This class follows heavily the design of
+        `dask_ml.decomposition.TruncatedSVD`, but it has been
+        modified to work with Dask-backed Xarray DataArrays.
 
         Parameters
         ----------
-        X (dask.array.Array): The input data matrix.
-        """
-        self._n_components = 0
-        self._u = da.empty_like(0)
-        self._s = np.empty_like(0)
-        self._v = da.empty_like(0)
-        if X.ndim != 2:
-            msg = "The input array must be two-dimensional."
-            logger.exception(msg)
-            raise ValueError(msg)
-        self._X = X
-        self._matrix_type = ""
-        self._check_matrix_type()
-        self._rechunk_array()
+        n_components: int
+            Number of SVD components to keep. Must be less than
+            the number of features of the input array.
+        algorithm: str, {'tsqr', 'randomized'}, (default 'tsqr')
+            SVD algorithm to use. 'tsqr' only supports chunking
+            along one dimension (i.e. the array should be tall-and-skinny
+            or short-and-fat), while 'randomized' supports chunking
+            in both dimensions. 'tsqr' is more precise, but it is slower
+            and struggles to operate on very large arrays. 'randomized' is
+            less precise but is much faster and can more easily operate on
+            very large arrays. See the Notes section for more.
+        compute_u: bool, (default True)
+            Whether to eagerly compute the left singular vectors, `u`. If
+            set to False, the computational graph for `u` is built but not
+            computed and `u` is returned as a lazy Dask collection.
+        compute_v: bool, (default True)
+            Whether to eagerly compute the right singular vectors, `v`. If
+            set to False, the computational graph for `v` is built but not
+            computed and `v` is returned as a lazy Dask collection.
+        compute_var_ratio: bool, (default False)
+            Whether to eagerly compute the ratio of explained variance by
+            each SVD component. If False, the computational graph is built
+            but not computed and is returned as a lazy Dask collection.
+        rechunk: bool, (default False)
+            If using the 'randomized' algorithm, whether to rechunk the input
+            array to ensure a single chunk along the smallest dimension.
+            Rechunking will always be performed when using the 'tsqr' algorithm
+            if the input array requires it, regardless of this parameter.
 
-    def _check_matrix_type(self, aspect_ratio=10):
-        """Checks if input matrix is tall-and-skinny,
-        short-and-fat or square/nearly-square, based on
-        the specified aspect ratio.
-
-        Parameters
+        Attributes
         ----------
-        aspect_ratio (int): defines the matrix type based on the
-        ratio between number of rows and columns. Defaults to 10.
-        """
-        n_rows, n_cols = self._X.shape
-        if (n_rows // n_cols) >= aspect_ratio:
-            self._matrix_type = "tall-and-skinny"
-        elif (n_cols // n_rows) >= aspect_ratio:
-            self._matrix_type = "short-and-fat"
-        else:
-            self._matrix_type = "square"
+        u: xr.DataArray, shape (n_samples, n_components)
+            The left singular vectors. If `compute_u=True`,
+            the xarray object is numpy-backed, otherwise it's
+            dask-backed.
+        s: np.ndarray, shape (n_components,)
+            The singular vectors.
+        v: xr.DataArray, shape (n_components, n_features)
+            The right singular vectors. If `compute_v=True`,
+            the xarray object is numpy-backed, otherwise it's
+            dask-backed.
+        explained_var_ratio: np.ndarray | da.Array, shape (n_components,)
+            The ratio of explained variance by each SVD component.
+            If `compute_var_ratio=True` returned as a numpy array,
+            otherwise returned as a dask array.
+        n_components: int
+            The number of SVD components requested.
+        algorithm: str
+            The SVD algorithm requested.
 
-    def _rechunk_array(self):
-        """Rechunks the input array to ensure optimal chunk sizes
-        for SVD computation based on matrix type.
+        Notes
+        -----
+        The 'tsqr' algorithm is implemented via Dask's `dask.array.linalg.svd`
+        function. The 'randomized' algorithm is implemented via Dask's
+        `dask.array.linalg.svd_compressed` function.
         """
-        msg = (
-            "Will need to rechunk the array before fitting the SVD. "
-            "This will add some overhead."
-        )
-        if (
-            self._matrix_type == "tall-and-skinny"
-            and self._X.shape[1] != self._X.chunksize[1]
-        ):
-            logger.info(msg)
-            self._X = self._X.rechunk({0: "auto", 1: -1})
-        if (
-            self._matrix_type == "short-and-fat"
-            and self._X.shape[0] != self._X.chunksize[0]
-        ):
-            logger.info(msg)
-            self._X = self._X.rechunk({0: -1, 1: "auto"})
+
+        self._n_components = n_components
+        self._algorithm = algorithm
+        self._compute_u = compute_u
+        self._compute_v = compute_v
+        self._compute_var_ratio = compute_var_ratio
+        self._rechunk = rechunk
+        self._u: xr.DataArray | None = None
+        self._s: np.ndarray | None = None
+        self._v: xr.DataArray | None = None
+        self._explained_var_ratio: np.ndarray | da.Array | None = None
 
     @property
     def n_components(self) -> int:
@@ -91,275 +101,267 @@ class SVD(ABC):
         return self._n_components
 
     @property
-    def s(self) -> np.ndarray:
+    def s(self):
         """Singular values (read-only)."""
         return self._s
 
     @property
-    def u(self) -> da.Array:
+    def u(self):
         """Left singular vectors (read-only)."""
         return self._u
 
     @property
-    def v(self) -> da.Array:
+    def v(self):
         """Right singular vectors (read-only)."""
         return self._v
 
     @property
-    def X(self) -> da.Array:
-        """Input matrix (read-only)."""
-        return self._X
+    def explained_var_ratio(self):
+        """Ratio of explained variance (read-only)."""
+        return self._explained_var_ratio
 
     @property
-    def matrix_type(self) -> str:
-        """Matrix type, based on aspect radio (read-only)."""
-        return self._matrix_type
+    def algorithm(self):
+        """SVD algorithm to use (read-only)."""
+        return self._algorithm
 
-    @abstractmethod
-    def fit(self, n_components: int, transform: bool = False, **kwargs):
-        """Perform the SVD fit operation.
+    def _rechunk_array(self, X: da.Array) -> da.Array:
+        """Rechunks the input array to ensure optimal chunk sizes
+        for SVD computation based on array shape. Dask's `svd()` algorithm
+        can only handle chunking in one direction, whereas the `svd_compressed()`
+        algorithm can handle chunking in both directions.
+        """
+        nb = X.numblocks
+        msg = (
+            "Will rechunk the array before fitting the SVD. "
+            "This will add some overhead."
+        )
+        nr, nc = X.shape
+        if nr > nc and nb[1] > 1:
+            msg = "The input array is considered tall-and-skinny. " + msg
+            logger.info(msg)
+            return X.rechunk({0: "auto", 1: -1})  # -1 means "all in one chunk"
+        if nr < nc and nb[0] > 1:
+            msg = "The input array is considered short-and-fat. " + msg
+            logger.info(msg)
+            return X.rechunk({0: -1, 1: "auto"})
+        if nr == nc and not (nb[0] == 1 or nb[1] == 1):
+            msg = "The input array is square. " + msg
+            logger.info(msg)
+            return X.rechunk({0: "auto", 1: -1})
+        return X
+
+    def _check_array(self, X: xr.DataArray):
+        """Checks if the input array is valid for SVD computation."""
+        if X.ndim != 2:
+            msg = (
+                "The input array must be 2-dimensional. "
+                f"Got a {X.ndim}-dimensional array."
+            )
+            logger.exception(msg)
+            raise ValueError(msg)
+        if self._n_components >= X.shape[1]:
+            msg = (
+                "n_components must be less than n_features. "
+                f"Got n_components: {self.n_components}, n_features: {X.shape[1]}."
+            )
+            logger.exception(msg)
+            raise ValueError(msg)
+        if not isinstance(X.data, da.Array):
+            msg = (
+                f"The {self.__class__.__name__} class only supports Dask-backed "
+                f"Xarray DataArrays. Got {type(X.data)} instead."
+            )
+            logger.exception(msg)
+            raise TypeError(msg)
+
+    def _singular_vectors_to_dataarray(
+        self, singular_vectors: np.ndarray, X: xr.DataArray
+    ) -> xr.DataArray:
+        """Transform the singular vectors into a Xarray DataArray following
+        the dimensions and coordinates of the DataArray on which SVD was
+        performed. The function automatically identifies whether the input
+        singular vectors are left or right singular vectors.
+        """
+        if singular_vectors.shape[0] == X.shape[0]:
+            # this corresponds to `u`: replace second dimension (e.g. 'time')
+            old_dims = list(X.dims)
+            new_dims = [old_dims[0], "components"]
+            coords = {k: v for k, v in X.coords.items() if k != old_dims[1]}
+            coords["components"] = np.arange(singular_vectors.shape[1])
+            name = "svd_u"
+        elif singular_vectors.shape[1] == X.shape[1]:
+            # this corresponds to `v`: replace first dimension (e.g. 'samples')
+            old_dims = list(X.dims)
+            new_dims = ["components", old_dims[1]]
+            coords = {old_dims[1]: X.coords[old_dims[1]]}
+            coords["components"] = np.arange(singular_vectors.shape[0])
+            name = "svd_v"
+        else:
+            msg = (
+                "Cannot transform singular vectors into Xarray DataArray. "
+                "Shape of singular_vectors does not match X."
+            )
+            logger.exception(msg)
+            raise ValueError(msg)
+        return xr.DataArray(singular_vectors, dims=new_dims, coords=coords, name=name)
+
+    def fit(
+        self,
+        X: xr.DataArray,
+        **kwargs,
+    ) -> None:
+        """Fit the SVD model to the input array.
 
         Parameters
         ----------
-        n_components (int): number of SVD components to keep.
-        transform (bool): whether to compute `u` for a tall-and-skinny
-        matrix or `v` for a short-and-fat matrix, since these can be much
-        larger than the other SVD results. Defaults to False.
-        **kwargs: keyword arguments for the underlying SVD computation.
+        X: (xarray.DataArray), shape (n_samples, n_features)
+            The input array to fit the SVD model on.
+        **kwargs:
+            Additional keyword arguments to pass to the
+            randomized SVD algorithm. See
+            `dask.array.linalg.svd_compressed` for more details.
         """
-
-    @abstractmethod
-    def transform(
-        self,
-    ):
-        """Compute `u` for a tall-and-skinny matrix or `v` for a
-        short-and-fat matrix if you have called `fit` with `transform=False`.
-        """
-
-
-class ExactSVD(SVD):
-    """Performs an exact Singular Value Decomposition (SVD)
-    on a Dask array.
-
-    Inherits from the SVD base class and implements
-    Dask's exact SVD algorithm for matrices that are either
-    tall-and-skinny or short-and-fat.
-    """
-
-    def __init__(self, X):
-        super().__init__(X)
-        if self._matrix_type == "square":
+        if self._algorithm not in ["tsqr", "randomized"]:
             msg = (
-                "The exact SVD algorithm can only handle tall-and-skinny "
-                "or short-and-fat matrices, i.e. the aspect ratio must be "
-                ">= 10. Try using the randomized SVD algorithm instead."
+                f"Unsupported algorithm: {self._algorithm}. "
+                "Supported algorithms are 'tsqr' and 'randomized'."
             )
             logger.exception(msg)
-            raise RuntimeError(msg)
+            raise ValueError(msg)
 
-    def fit(self, n_components=-1, transform=False, **kwargs):
-        """The default value for `n_components` is -1, meaning
-        keep all SVD components. For additional keyword arguments,
-        see the documentation for `dask.array.linalg.svd`.
+        self._check_array(X)
+        X_da = X.data
+
+        if self._algorithm == "tsqr":
+            msg = "Will use TSQR algorithm."
+            logger.info(msg)
+            X_da = self._rechunk_array(X_da)
+            u, s, v = da.linalg.svd(X_da)  # employs tsqr internally
+            u = u[:, : self._n_components]
+            s = s[: self._n_components]
+            v = v[: self._n_components]
+        else:
+            msg = "Will use randomized algorithm."
+            logger.info(msg)
+            X_da = self._rechunk_array(X_da) if self._rechunk else X_da
+            u, s, v = da.linalg.svd_compressed(X_da, self._n_components, **kwargs)
+
+        X_da_transformed = u * s
+        explained_var = X_da_transformed.var(axis=0)
+        full_var = X_da.var(axis=0).sum()
+        explained_var_ratio = explained_var / full_var
+
+        results = []
+        results.append(s)
+
+        if self._compute_u:
+            results.append(u)
+        if self._compute_v:
+            results.append(v)
+        if self._compute_var_ratio:
+            results.append(explained_var_ratio)
+
+        # compute all Dask collections at once
+        msg = "Computing SVD results..."
+        logger.info(msg)
+        computed = dask.compute(*results)
+        msg = "Done."
+        logger.info(msg)
+
+        s = computed[0]
+        idx = 1
+        if self._compute_u:
+            u = computed[idx]
+            idx += 1
+        if self._compute_v:
+            v = computed[idx]
+            idx += 1
+        if self._compute_var_ratio:
+            explained_var_ratio = computed[idx]
+        self._u = self._singular_vectors_to_dataarray(u, X)
+        self._s = s
+        self._v = self._singular_vectors_to_dataarray(v, X)
+        self._explained_var_ratio = explained_var_ratio
+
+    def compute_u(self) -> None:
+        """Compute left singular vectors if they are
+        still a lazy Dask collection.
         """
-        if n_components != -1 and (
-            not isinstance(n_components, int) or n_components <= 0
-        ):
-            msg = "n_components must be -1 or a positive integer."
+        if self._u is None:
+            msg = "You must call fit() before calling compute_u()."
             logger.exception(msg)
             raise ValueError(msg)
-        self._n_components = n_components
-        try:
-            logger.info("Fitting exact SVD...")
-            u, s, v = da.linalg.svd(self._X, **kwargs)
-            if self._n_components != -1:
-                u = u[:, : self._n_components]
-                s = s[: self._n_components]
-                v = v[: self._n_components, :]
-            if transform:
-                u, s, v = persist(u, s, v)
-            elif self._matrix_type == "tall-and-skinny":
-                s, v = persist(s, v)
-            elif self._matrix_type == "short-and-fat":
-                s, u = persist(s, u)
-            self._u = u
-            self._v = v
-            self._s = s.compute()
-            logger.info("Finished fitting exact SVD.")
-        except Exception as e:
-            msg = "Failed fitting exact SVD."
+        msg = "Computing left singular vectors..."
+        logger.info(msg)
+        self._u = self._u.compute()
+        msg = "Done."
+        logger.info(msg)
+
+    def compute_v(self) -> None:
+        """Compute right singular vectors if they are
+        still a lazy Dask collection.
+        """
+        if self._v is None:
+            msg = "You must call fit() before calling compute_v()."
             logger.exception(msg)
-            raise RuntimeError(msg) from e
+            raise ValueError(msg)
+        msg = "Computing right singular vectors..."
+        logger.info(msg)
+        self._v = self._v.compute()
+        msg = "Done."
+        logger.info(msg)
 
-    def transform(self):
-        if self._n_components == 0:
-            msg = "You have to call `fit` before you can call `transform`."
+    def compute_var_ratio(self) -> None:
+        """Compute the ratio of explained variance if it is
+        still a lazy Dask collection.
+        """
+        if self._explained_var_ratio is None:
+            msg = "You must call fit() before calling compute_var_ratio()."
             logger.exception(msg)
-            raise RuntimeError(msg)
-        try:
-            if self._matrix_type == "tall-and-skinny":
-                self._u = self._u.persist()
-            if self._matrix_type == "short-and-fat":
-                self._v = self._v.persist()
-        except Exception as e:
-            msg = "Failed transforming input matrix."
-            logger.exception(msg)
-            raise RuntimeError(msg) from e
+            raise ValueError(msg)
+        msg = "Computing explained variance ratio..."
+        logger.info(msg)
+        if isinstance(self._explained_var_ratio, da.Array):
+            self._explained_var_ratio = self._explained_var_ratio.compute()
+        msg = "Done."
+        logger.info(msg)
 
+    def transform(self, X: xr.DataArray) -> xr.DataArray:
+        """Transform the input array using the computed right singular vectors.
 
-class TruncatedSVD(SVD):
-    """Performs a truncated Singular Value Decomposition (SVD)
-    on a Dask array.
+        Parameters
+        ----------
+        X: (xarray.DataArray), shape (n_samples, n_features)
+            the array to be transformed, which must have the same
+            number of features as the original array on which SVD was fitted.
 
-    Inherits from the SVD base class.
-    Supports both tall-and-skinny and short-and-fat matrices,
-    but not square matrices. If the matrix is short-and-fat, it transposes
-    the matrix into a tall-and-skinny one before fitting the truncated SVD.
-    """
+        Returns
+        -------
+        xarray.DataArray: the transformed array.
+        """
 
-    def __init__(self, X):
-        super().__init__(X)
-        self._decomposer = None
-        if self._matrix_type == "square":
+        if not isinstance(self._v, xr.DataArray):
             msg = (
-                "The truncated SVD algorithm can only handle tall-and-skinny "
-                "or short-and-fat matrices. "
-                "For square/nearly-square matrices, try using the randomized "
-                "SVD algorithm instead."
+                "Computed right singular vectors are "
+                "required in order to call transform()."
             )
             logger.exception(msg)
-            raise RuntimeError(msg)
-
-    def fit(self, n_components, transform=False, **kwargs):
-        """For additional keyword arguments, see the documentation
-        for `dask_ml.decomposition.TruncatedSVD`.
-        """
-        if not isinstance(n_components, int) or n_components <= 0:
-            msg = "n_components must be a positive integer."
-            logger.exception(msg)
             raise ValueError(msg)
-        self._n_components = n_components
-
-        logger.info("Fitting truncated SVD...")
-        self._decomposer = tsvd(
-            n_components=self._n_components, algorithm="tsqr", **kwargs
-        )
-
+        X_da = X.data
         try:
-            if self._matrix_type == "tall-and-skinny":
-                logger.info("Using truncated SVD for tall-and-skinny matrix.")
-                if transform:
-                    X_transformed = self._decomposer.fit_transform(self._X)
-                    self._u = (
-                        X_transformed / self._decomposer.singular_values_
-                    )  # unscaled
-                else:
-                    self._decomposer.fit(self._X)
-                self._s = self._decomposer.singular_values_  # numpy array
-                v_np = self._decomposer.components_
-                self._v = da.from_array(v_np, chunks=v_np.shape)
-
-            elif self._matrix_type == "short-and-fat":
-                logger.info(
-                    "Using *transposed* truncated SVD for short-and-fat matrix."
-                )
-                if transform:
-                    X_transformed_t = self._decomposer.fit_transform(self._X.T)
-                    u_t = (
-                        X_transformed_t / self._decomposer.singular_values_
-                    )  # unscaled
-                    self._v = u_t.T
-                else:
-                    self._decomposer.fit(self._X.T)
-                self._s = self._decomposer.singular_values_  # numpy array
-                v_t_np = self._decomposer.components_
-                u_np = v_t_np.T
-                self._u = da.from_array(u_np, chunks=u_np.shape)
-
-            logger.info("Finished fitting truncated SVD.")
-
-        except Exception as e:
-            msg = "Failed fitting truncated SVD."
+            msg = "Computing transformation..."
+            logger.info(msg)
+            X_da_transformed = X_da.dot(self._v.data.T)
+            X_da_transformed = X_da_transformed.compute()
+            msg = "Done."
+            logger.info(msg)
+        except ValueError as e:
+            msg = (
+                "Cannot transform the input array with the computed right "
+                "singular vectors. Ensure that the input array has the same "
+                "number of features as the original array on which SVD was fitted."
+            )
             logger.exception(msg)
-            raise RuntimeError(msg) from e
-
-    def transform(self):
-        if self._decomposer is None:
-            msg = "You have to call `fit` before you can call `transform`."
-            logger.exception(msg)
-            raise RuntimeError(msg)
-        try:
-            if self._matrix_type == "tall-and-skinny":
-                X_transformed = self._decomposer.transform(self._X)
-                self._u = X_transformed / self._decomposer.singular_values_  # unscaled
-            if self._matrix_type == "short-and-fat":
-                X_transformed_t = self._decomposer.transform(self._X.T)
-                u_t = X_transformed_t / self._decomposer.singular_values_  # unscaled
-                self._v = u_t.T
-        except Exception as e:
-            msg = "Failed transforming input matrix."
-            logger.exception(msg)
-            raise RuntimeError(msg) from e
-
-
-class RandomizedSVD(SVD):
-    """Performs a truncated randomized Singular Value
-    Decomposition (SVD) on large matrices of any shape.
-
-    Inherits from the SVD base class.
-    Supports tall-and-skinny, short-and-fat, and square/nearly-square
-    matrices. The SVD computation is performed with
-    `dask.array.linalg.svd_compressed`.
-    """
-
-    def __init__(self, X):
-        super().__init__(X)
-
-    def fit(self, n_components, transform=False, **kwargs):
-        """Note that if the matrix is square/nearly-square, if `transform=False`
-        only the singular values and right singular vectors will be computed
-        (i.e. same behavior as a tall-and-skinny matrix).
-
-        For additional keyword arguments, see the documentation
-        for `dask.array.linalg.svd_compressed`.
-        """
-        if not isinstance(n_components, int) or n_components <= 0:
-            msg = "n_components must be a positive integer."
-            logger.exception(msg)
-            raise ValueError(msg)
-        self._n_components = n_components
-        try:
-            logger.info("Fitting randomized SVD...")
-            u, s, v = da.linalg.svd_compressed(self._X, n_components, **kwargs)
-            if transform:
-                u, s, v = persist(u, s, v)
-            elif (
-                self._matrix_type == "tall-and-skinny-matrix"
-                or self._matrix_type == "square"
-            ):
-                s, v = persist(s, v)
-            elif self._matrix_type == "short-and-fat":
-                s, u = persist(s, u)
-            self._u = u
-            self._v = v
-            self._s = s.compute()
-            logger.info("Finished fitting randomized SVD.")
-        except Exception as e:
-            msg = "Failed fitting randomized SVD."
-            logger.exception(msg)
-            raise RuntimeError(msg) from e
-
-    def transform(self):
-        if self._n_components == 0:
-            msg = "You have to call `fit` before you can call `transform`."
-            logger.exception(msg)
-            raise RuntimeError(msg)
-        try:
-            if self._matrix_type == "tall-and-skinny" or self._matrix_type == "square":
-                self._u = self._u.persist()
-            if self._matrix_type == "short-and-fat":
-                self._v = self._v.persist()
-        except Exception as e:
-            msg = "Failed transforming input matrix."
-            logger.exception(msg)
-            raise RuntimeError(msg) from e
+            raise ValueError(msg) from e
+        return self._singular_vectors_to_dataarray(X_da_transformed, X)
