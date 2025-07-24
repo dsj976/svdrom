@@ -139,7 +139,7 @@ class TruncatedSVD:
             # this corresponds to `v`: replace first dimension (e.g. 'samples')
             old_dims = list(X.dims)
             new_dims = ["components", old_dims[1]]
-            coords = {k: v for k, v in X.coords.items() if k != old_dims[0]}
+            coords = {old_dims[1]: X.coords[old_dims[1]]}
             coords["components"] = np.arange(singular_vectors.shape[0])
             name = "svd_v"
         else:
