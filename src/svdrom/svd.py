@@ -56,6 +56,27 @@ class TruncatedSVD:
             Rechunking will always be performed when using the 'tsqr' algorithm
             if the input array requires it, regardless of this parameter.
 
+        Attributes
+        ----------
+        u: xr.DataArray, shape (n_samples, n_components)
+            The left singular vectors. If `compute_u=True`,
+            the xarray object is numpy-backed, otherwise it's
+            dask-backed.
+        s: np.ndarray, shape (n_components,)
+            The singular vectors.
+        v: xr.DataArray, shape (n_components, n_features)
+            The right singular vectors. If `compute_v=True`,
+            the xarray object is numpy-backed, otherwise it's
+            dask-backed.
+        explained_var_ratio: np.ndarray | da.Array, shape (n_components,)
+            The ratio of explained variance by each SVD component.
+            If `compute_var_ratio=True` returned as a numpy array,
+            otherwise returned as a dask array.
+        n_components: int
+            The number of SVD components requested.
+        algorithm: str
+            The SVD algorithm requested.
+
         Notes
         -----
         The 'tsqr' algorithm is implemented via Dask's `dask.array.linalg.svd`
