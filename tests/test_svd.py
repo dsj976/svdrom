@@ -55,14 +55,21 @@ def test_basic(algorithm):
         assert hasattr(tsvd, attr), f"TruncatedSVD should have attribute '{attr}'."
 
     X = make_dataarray("tall-and-skinny")
-    n_samples, n_features = X.shape
     tsvd.fit(X)
     assert isinstance(
         tsvd.u, xr.DataArray
     ), f"u should be an xarray DataArray, got {type(tsvd.u)}."
+    assert isinstance(tsvd.u.data, np.ndarray), (
+        "u should be a xarray DataArray with numpy ndarray data, "
+        f"got {type(tsvd.u.data)}."
+    )
     assert isinstance(
         tsvd.v, xr.DataArray
     ), f"v should be an xarray DataArray, got {type(tsvd.v)}."
+    assert isinstance(tsvd.v.data, np.ndarray), (
+        "v should be a xarray DataArray with numpy ndarray data, "
+        f"got {type(tsvd.v.data)}."
+    )
     assert isinstance(
         tsvd.s, np.ndarray
     ), f"s should be a numpy ndarray, got {type(tsvd.s)}."
@@ -70,6 +77,27 @@ def test_basic(algorithm):
         "explained_var_ratio should be a numpy ndarray, "
         f"got {type(tsvd.explained_var_ratio)}."
     )
+    assert np.all(
+        tsvd.explained_var_ratio > 0
+    ), "explained_var_ratio should contain values greater than 0."
+    assert np.all(
+        tsvd.explained_var_ratio < 1
+    ), "explained_var_ratio should contain values less than 1."
+
+
+@pytest.mark.parametrize("matrix_type", ["tall-and-skinny", "short-and-fat", "square"])
+@pytest.mark.parametrize("algorithm", ["tsqr", "randomized"])
+def test_matrix_types(matrix_type, algorithm):
+    X = make_dataarray(matrix_type)
+    n_samples, n_features = X.shape
+    n_components = 10
+    tsvd = TruncatedSVD(
+        n_components=n_components,
+        algorithm=algorithm,
+    )
+    tsvd.fit(X)
+    X_dims = list(X.dims)
+    X_coords = list(X.coords)
     assert tsvd.u.shape == (
         X.shape[0],
         n_components,
@@ -85,15 +113,23 @@ def test_basic(algorithm):
         f"Shape of explained_var_ratio should be ({n_components},), "
         f"got {tsvd.explained_var_ratio.shape}."
     )
-
-
-@pytest.mark.parametrize("matrix_type", ["tall-and-skinny", "short-and-fat", "square"])
-@pytest.mark.parametrize("algorithm", ["tsqr", "randomized"])
-def test_matrix_types(matrix_type, algorithm):
-    X = make_dataarray(matrix_type)
-    n_components = 10
-    tsvd = TruncatedSVD(
-        n_components=n_components,
-        algorithm=algorithm,
-    )
-    tsvd.fit(X)
+    u_dims = tuple(tsvd.u.dims)
+    u_coords = tuple(tsvd.u.coords)
+    v_dims = tuple(tsvd.v.dims)
+    v_coords = tuple(tsvd.v.coords)
+    assert u_dims == (
+        X_dims[0],
+        "components",
+    ), f"u should have dimensions ({X_dims[0]}, 'components'), got {u_dims}."
+    assert all(
+        u_coord in X_coords for u_coord in u_coords if u_coord != "components"
+    ), f"u should have all coordinates from X except 'components', got {u_coords}."
+    assert "components" in u_coords, "u should have 'components' coordinate."
+    assert v_dims == (
+        "components",
+        X_dims[1],
+    ), f"v should have dimensions ('components', {X_dims[1]}), got {v_dims}."
+    assert all(
+        v_coord in X_coords for v_coord in v_coords if v_coord != "components"
+    ), f"v should have all coordinates from X except 'components', got {v_coords}."
+    assert "components" in v_coords, "v should have 'components' coordinate."
