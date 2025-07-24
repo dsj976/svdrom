@@ -7,6 +7,15 @@ from svdrom.svd import TruncatedSVD
 
 
 def make_dataarray(matrix_type: str) -> xr.DataArray:
+    """Make a Dask-backed DataArray with random data of
+    specified matrix type. The matrix type can be one of:
+    - "tall-and-skinny": More samples than features.
+    - "short-and-fat": More features than samples.
+    - "square": Equal number of samples and features.
+
+    Chunks are set to test that the TruncatedSVD can handle
+    them correctly.
+    """
     if matrix_type == "tall-and-skinny":
         n_samples = 10_000
         n_features = 100
@@ -38,6 +47,7 @@ def make_dataarray(matrix_type: str) -> xr.DataArray:
 
 @pytest.mark.parametrize("algorithm", ["tsqr", "randomized"])
 def test_basic(algorithm):
+    """Test basic functionality of TruncatedSVD."""
     n_components = 10
     tsvd = TruncatedSVD(
         n_components=n_components,
@@ -88,6 +98,7 @@ def test_basic(algorithm):
 @pytest.mark.parametrize("matrix_type", ["tall-and-skinny", "short-and-fat", "square"])
 @pytest.mark.parametrize("algorithm", ["tsqr", "randomized"])
 def test_matrix_types(matrix_type, algorithm):
+    """Test TruncatedSVD with different matrix shapes."""
     X = make_dataarray(matrix_type)
     n_samples, n_features = X.shape
     n_components = 10
