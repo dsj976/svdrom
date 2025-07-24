@@ -165,3 +165,27 @@ def test_orthogonality(algorithm):
     assert np.allclose(
         v_ortho, identity_k, atol=1e-5
     ), "v @ v.T is not close to identity."
+
+
+@pytest.mark.parametrize("matrix_type", ["tall-and-skinny", "short-and-fat"])
+def test_transform(matrix_type):
+    """Test the transform method of TruncatedSVD."""
+    X = make_dataarray(matrix_type)
+    n_components = 10
+    tsvd = TruncatedSVD(n_components=n_components)
+    tsvd.fit(X)
+
+    X_t = tsvd.transform(X)
+    assert isinstance(
+        X_t, xr.DataArray
+    ), "Transformed data should be an xarray DataArray."
+    assert isinstance(X_t.data, np.ndarray), (
+        "Transformed data should have numpy ndarray as data, " f"got {type(X_t.data)}."
+    )
+    assert X_t.shape == (X.shape[0], n_components), (
+        f"Transformed data should have shape ({X.shape[0]}, {n_components}), "
+        f"but got {X_t.shape}."
+    )
+    assert np.allclose(
+        tsvd.u * tsvd.s, X_t, atol=1e-5
+    ), "Transformed data does not match u * s."
