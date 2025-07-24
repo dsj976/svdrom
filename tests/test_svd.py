@@ -144,3 +144,24 @@ def test_matrix_types(matrix_type, algorithm):
         v_coord in X_coords for v_coord in v_coords if v_coord != "components"
     ), f"v should have all coordinates from X except 'components', got {v_coords}."
     assert "components" in v_coords, "v should have 'components' coordinate."
+
+
+@pytest.mark.parametrize("algorithm", ["tsqr", "randomized"])
+def test_orthogonality(algorithm):
+    """Test orthogonality of u and v matrices."""
+    X = make_dataarray("tall-and-skinny")
+    n_components = 10
+    tsvd = TruncatedSVD(n_components=n_components, algorithm=algorithm)
+    tsvd.fit(X)
+
+    identity_k = np.eye(tsvd.n_components, dtype=np.float32)
+    u, v = tsvd.u.data, tsvd.v.data
+    u_ortho = u.T @ u
+    v_ortho = v @ v.T
+
+    assert np.allclose(
+        u_ortho, identity_k, atol=1e-5
+    ), "u.T @ u is not close to identity."
+    assert np.allclose(
+        v_ortho, identity_k, atol=1e-5
+    ), "v @ v.T is not close to identity."
