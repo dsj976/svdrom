@@ -17,7 +17,6 @@ class TruncatedSVD:
         compute_v: bool = True,
         compute_var_ratio: bool = False,
         rechunk: bool = False,
-        aspect_ratio: int = 10,
     ):
         self._n_components = n_components
         self._algorithm = algorithm
@@ -25,7 +24,6 @@ class TruncatedSVD:
         self._compute_v = compute_v
         self._compute_var_ratio = compute_var_ratio
         self._rechunk = rechunk
-        self._aspect_ratio = aspect_ratio
         self._u: xr.DataArray | da.Array | None = None
         self._s: np.ndarray | None = None
         self._v: xr.DataArray | da.Array | None = None
@@ -60,11 +58,6 @@ class TruncatedSVD:
     def compute_var_ratio(self):
         """Whether to compute the ratio of explained variance (read-only)."""
         return self._compute_var_ratio
-
-    @property
-    def aspect_ratio(self):
-        """Aspect ratio used to determine matrix type (read-only)."""
-        return self._aspect_ratio
 
     @property
     def algorithm(self):

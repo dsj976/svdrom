@@ -59,7 +59,6 @@ def test_basic(algorithm):
         "s",
         "v",
         "explained_var_ratio",
-        "aspect_ratio",
     )
     for attr in expected_attrs:
         assert hasattr(tsvd, attr), f"TruncatedSVD should have attribute '{attr}'."
