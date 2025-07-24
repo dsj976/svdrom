@@ -18,6 +18,51 @@ class TruncatedSVD:
         compute_var_ratio: bool = False,
         rechunk: bool = False,
     ):
+        """Linear dimensionality reduction using truncated
+        Singular Value Decomposition (SVD).
+
+        This class follows heavily the design of
+        `dask_ml.decomposition.TruncatedSVD`, but it has been
+        modified to work with Dask-backed Xarray DataArrays.
+
+        Parameters
+        ----------
+        n_components: int
+            Number of SVD components to keep. Must be less than
+            the number of features of the input array.
+        algorithm: str, {'tsqr', 'randomized'}, (default 'tsqr')
+            SVD algorithm to use. 'tsqr' only supports chunking
+            along one dimension (i.e. the array should be tall-and-skinny
+            or short-and-fat), while 'randomized' supports chunking
+            in both dimensions. 'tsqr' is more precise, but it is slower
+            and struggles to operate on very large arrays. 'randomized' is
+            less precise but is much faster and can more easily operate on
+            very large arrays. See the Notes section for more.
+        compute_u: bool, (default True)
+            Whether to eagerly compute the left singular vectors, `u`. If
+            set to False, the computational graph for `u` is built but not
+            computed and `u` is returned as a lazy Dask collection.
+        compute_v: bool, (default True)
+            Whether to eagerly compute the right singular vectors, `v`. If
+            set to False, the computational graph for `v` is built but not
+            computed and `v` is returned as a lazy Dask collection.
+        compute_var_ratio: bool, (default False)
+            Whether to eagerly compute the ratio of explained variance by
+            each SVD component. If False, the computational graph is built
+            but not computed and is returned as a lazy Dask collection.
+        rechunk: bool, (default False)
+            If using the 'randomized' algorithm, whether to rechunk the input
+            array to ensure a single chunk along the smallest dimension.
+            Rechunking will always be performed when using the 'tsqr' algorithm
+            if the input array requires it, regardless of this parameter.
+
+        Notes
+        -----
+        The 'tsqr' algorithm is implemented via Dask's `dask.array.linalg.svd`
+        function. The 'randomized' algorithm is implemented via Dask's
+        `dask.array.linalg.svd_compressed` function.
+        """
+
         self._n_components = n_components
         self._algorithm = algorithm
         self._compute_u = compute_u
