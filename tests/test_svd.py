@@ -188,3 +188,24 @@ def test_transform(matrix_type):
     assert np.allclose(
         tsvd.u * tsvd.s, X_t, atol=1e-5
     ), "Transformed data does not match u * s."
+
+
+@pytest.mark.parametrize("matrix_type", ["tall-and-skinny", "short-and-fat"])
+def test_reconstruct_snapshot(matrix_type):
+    """Test the reconstruct_snapshot method of TruncatedSVD."""
+    X = make_dataarray(matrix_type)
+    n_components = 10
+    tsvd = TruncatedSVD(n_components=n_components)
+    tsvd.fit(X)
+
+    X_r = tsvd.reconstruct_snapshot(0)
+    assert isinstance(
+        X_r, xr.DataArray
+    ), f"Reconstructed snapshot should be an xarray DataArray, got {type(X_r)}."
+    assert isinstance(X_r.data, np.ndarray), (
+        "Reconstructed snapshot should have numpy ndarray as data, "
+        f"got {type(X_r.data)}."
+    )
+    assert X_r.shape == (
+        tsvd.u.shape[0],
+    ), f"Reconstructed snapshot should have shape ({tsvd.u.shape[0]}), got {X_r.shape}."
