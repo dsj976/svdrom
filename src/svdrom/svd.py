@@ -366,7 +366,11 @@ class TruncatedSVD:
             raise ValueError(msg) from e
         return self._singular_vectors_to_dataarray(X_da_transformed, X)
 
-    def reconstruct_snapshot(self, snapshot: int | str) -> xr.DataArray:
+    def reconstruct_snapshot(
+        self,
+        snapshot: int | str,
+        snapshot_dim: str = "time",
+    ) -> xr.DataArray:
         """Reconstruct a snapshot or group of snapshots from
         the left singular vectors, singular values, and right
         singular vectors.
@@ -377,6 +381,8 @@ class TruncatedSVD:
             The index or label of the snapshot to reconstruct.
             If it's an integer, it's interpreted as an index. If it's
             a string, it's interpreted as a label.
+        snapshot_dim: str, (default 'time')
+            The dimension along which the snapshots are indexed.
 
         Returns
         -------
@@ -405,7 +411,13 @@ class TruncatedSVD:
 
         if isinstance(snapshot, int):
             try:
-                return self._u @ (self._s * self._v[:, snapshot].T)
+                if snapshot_dim in self._v.dims:
+                    return self._u @ (self._s * self._v[:, snapshot].T)
+                if snapshot_dim in self._u.dims:
+                    return (self._u[snapshot_dim, :] * self._s) @ self._v
+                msg = f"Snapshot dimension '{snapshot_dim}' does not exist."
+                logger.exception(msg)
+                raise ValueError(msg)
             except IndexError as e:
                 msg = (
                     f"Snapshot index {snapshot} is out of bounds for the right "
@@ -415,7 +427,13 @@ class TruncatedSVD:
                 raise IndexError(msg) from e
         else:
             try:
-                return self._u @ (self._s * self._v.loc[:, snapshot].T)
+                if snapshot_dim in self._v.dims:
+                    return self._u @ (self._s * self._v.loc[:, snapshot].T)
+                if snapshot_dim in self._u.dims:
+                    return (self._u.loc[snapshot_dim, :] * self._s) @ self._v
+                msg = f"Snapshot dimension '{snapshot_dim}' does not exist."
+                logger.exception(msg)
+                raise ValueError(msg)
             except KeyError as e:
                 msg = f"Snapshot '{snapshot}' not found in the right singular vectors."
                 logger.exception(msg)
