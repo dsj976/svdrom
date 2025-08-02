@@ -38,4 +38,3 @@ repos:
           - pytest
           - xarray
           - dask
-          - dask-ml
