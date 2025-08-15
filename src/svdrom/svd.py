@@ -391,10 +391,10 @@ class TruncatedSVD:
         Examples
         --------
         # Reconstructs the first snapshot
-        >>> tsvd_rechunk.reconstruct_snapshot(0)
+        >>> tsvd.reconstruct_snapshot(0)
 
         # Reconstructs all snapshots with label '2017-01-01'
-        >>> tsvd_rechunk.reconstruct_snapshot("2017-01-01")
+        >>> tsvd.reconstruct_snapshot("2017-01-01")
         """
 
         if not (
