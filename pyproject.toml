@@ -28,9 +28,9 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
+  "zarr<=3.1.0",
   "dask[complete]",
   "xarray[complete]",
-  "dask-ml",
 ]
 
 [project.optional-dependencies]
@@ -38,6 +38,9 @@ dev = [
   "pytest >=6",
   "pytest-cov >=3",
   "pre-commit",
+]
+geospatial = [
+  "cartopy >= 0.24.1"
 ]
 
 [project.urls]
