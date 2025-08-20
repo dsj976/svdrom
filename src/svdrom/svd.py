@@ -204,7 +204,19 @@ class TruncatedSVD:
             )
             logger.exception(msg)
             raise ValueError(msg)
-        return xr.DataArray(singular_vectors, dims=new_dims, coords=coords, name=name)
+
+        new_coords = {}
+        for coord_name, coord_array in X.coords.items():
+            if all(dim in new_dims for dim in coord_array.dims):
+                new_coords[coord_name] = coord_array
+
+        if "components" in new_dims:
+            comp_idx = new_dims.index("components")
+            new_coords["components"] = np.arange(singular_vectors.shape[comp_idx])
+
+        return xr.DataArray(
+            singular_vectors, dims=new_dims, coords=new_coords, name=name
+        )
 
     def fit(
         self,
