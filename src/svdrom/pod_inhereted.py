@@ -12,7 +12,7 @@ logger = setup_logger("POD", "pod.log")
 class POD(TruncatedSVD):
     def __init__(
         self,
-        n_components: int,
+        n_modes: int,
         algorithm: str = "tsqr",
         compute_modes: bool = True,
         compute_time_coeffs: bool = True,
@@ -22,7 +22,7 @@ class POD(TruncatedSVD):
         time_dimension: str = "time",
     ):
         super().__init__(
-            n_components=n_components,
+            n_components=n_modes,
             algorithm=algorithm,
             compute_u=compute_modes,
             compute_v=compute_time_coeffs,
