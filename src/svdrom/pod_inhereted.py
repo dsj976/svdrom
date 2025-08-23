@@ -13,7 +13,7 @@ class POD(TruncatedSVD):
     def __init__(
         self,
         n_modes: int,
-        algorithm: str = "tsqr",
+        svd_algorithm: str = "tsqr",
         compute_modes: bool = True,
         compute_time_coeffs: bool = True,
         compute_energy_ratio: bool = False,
@@ -23,7 +23,7 @@ class POD(TruncatedSVD):
     ):
         super().__init__(
             n_components=n_modes,
-            algorithm=algorithm,
+            algorithm=svd_algorithm,
             compute_u=compute_modes,
             compute_v=compute_time_coeffs,
             compute_var_ratio=compute_energy_ratio,
