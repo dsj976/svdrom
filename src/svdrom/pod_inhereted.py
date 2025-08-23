@@ -37,12 +37,12 @@ class POD(TruncatedSVD):
     @property
     def modes(self) -> xr.DataArray | None:
         """POD (spatial) modes (read-only)."""
-        return super().u
+        return self._u
 
     @property
     def time_coeffs(self) -> xr.DataArray | None:
         """Time coefficients (read-only)."""
-        return super().v
+        return self._v
 
     @property
     def energy(self) -> np.ndarray | None:
@@ -53,7 +53,7 @@ class POD(TruncatedSVD):
 
     @property
     def explained_energy_ratio(self) -> np.ndarray | da.Array | None:
-        return super().explained_var_ratio
+        return self._explained_var_ratio
 
     def _preprocess_array(self, X: xr.DataArray) -> xr.DataArray:
         """Transpose the array if the user-specified time dimension
