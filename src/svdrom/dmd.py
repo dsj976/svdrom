@@ -67,6 +67,8 @@ class OptDMD:
                 f"Specified time dimension {self._time_dimension} not "
                 "a dimension of the right singular vectors 'v'."
             )
+            logger.exception(msg)
+            raise ValueError
 
     def _generate_fit_time_vector(self, v: xr.DataArray):
         """Given the right singular vectors containing the temporal
