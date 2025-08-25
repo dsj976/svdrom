@@ -14,6 +14,23 @@ class OptDMD:
         time_dimension: str = "time",
         time_units: str = "s",
     ) -> None:
+        """Optimized Dynamic Mode Decomposition (DMD) via variable
+        projection method for nonlinear least squares.
+
+        This class makes use of BOPDMD from the PyDMD library
+        (https://pydmd.github.io/PyDMD/bopdmd.html).
+
+        Parameters
+        ----------
+        n_modes: int
+            Number of DMD modes to compute (must be positive or -1 for all
+            available modes).
+        time_dimension: str
+            Name of the time dimension in the input data. Default is "time".
+        time_units: str
+            Units of the time dimension. Default is "s".
+            Must be one of {"s", "h"}, where "s" is seconds and "h" is hours.
+        """
         if n_modes != -1 and n_modes < 1:
             msg = "'n_modes' must be a positive integer or -1."
             logger.exception(msg)
@@ -105,6 +122,20 @@ class OptDMD:
         return time_vector.astype("float64")
 
     def fit(self, u: xr.DataArray, s: np.ndarray, v: xr.DataArray, **kwargs) -> None:
+        """Fit a OptDMD model to the results of a Singular Value Decomposition (SVD).
+
+        Parameters
+        ----------
+        u: xarray.DataArray, shape (n_spatial_points, n_components)
+            The left singular vectors, containing the spatial information.
+        s: np.ndarray, shape (n_components,)
+            The singular values.
+        v: xarray.DataArray, shape (n_components, n_timesteps)
+            The right singular vectors, containing the temporal information.
+        **kwargs:
+            Additional keyword arguments to pass to PyDMD's BOPDMD constructor.
+            See https://pydmd.github.io/PyDMD/bopdmd.html for more info.
+        """
         self._check_svd_inputs(u, s, v)
         if self._n_modes > len(s):
             msg = (
