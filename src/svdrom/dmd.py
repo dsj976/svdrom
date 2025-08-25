@@ -12,13 +12,19 @@ class OptDMD:
         self,
         n_modes: int = -1,
         time_dimension: str = "time",
+        time_units: str = "s",
     ) -> None:
         if n_modes != -1 and n_modes < 1:
             msg = "'n_modes' must be a positive integer or -1."
             logger.exception(msg)
             raise ValueError(msg)
+        if time_units not in {"s", "h"}:
+            msg = "'time_units' must be one of {'s', 'h'}."
+            logger.exception(msg)
+            raise ValueError(msg)
         self._n_modes = n_modes
         self._time_dimension = time_dimension
+        self._time_units = time_units
         self._eigs: np.ndarray | None = None
         self._amplitudes: np.ndarray | None = None
         self._modes: xr.DataArray | None = None
@@ -47,6 +53,11 @@ class OptDMD:
     def amplitudes(self) -> np.ndarray | None:
         """The DMD amplitudes (read-only)."""
         return self._amplitudes
+
+    @property
+    def time_units(self) -> str:
+        """The time units to use in the DMD fit and forecast (read-only)."""
+        return self._time_units
 
     def _check_svd_inputs(self, u: xr.DataArray, s: np.ndarray, v: xr.DataArray):
         """Check that the passed SVD results are valid."""
@@ -85,6 +96,12 @@ class OptDMD:
         """Given the right singular vectors containing the temporal
         information, generate the time vector for the DMD fit.
         """
+        time_deltas = np.diff(v[self._time_dimension].values).astype(
+            f"timedelta64[{self._time_units}]"
+        )
+        time_vector = np.cumsum(time_deltas)
+        start_time = np.array([0], dtype=f"timedelta64[{self._time_units}]")
+        return np.concat((start_time, time_vector))
 
     def fit(self, u: xr.DataArray, s: np.ndarray, v: xr.DataArray):
         self._check_svd_inputs(u, s, v)
