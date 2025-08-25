@@ -61,16 +61,27 @@ class OptDMD:
         if len(u.components) != len(v.components) or len(u.components) != len(s):
             msg = "'u', 's' and 'v' must have the same number of components."
             logger.exception(msg)
-            raise ValueError
+            raise ValueError(msg)
         if self._time_dimension not in v.dims:
             msg = (
-                f"Specified time dimension {self._time_dimension} not "
+                f"Specified time dimension '{self._time_dimension}' not "
                 "a dimension of the right singular vectors 'v'."
             )
             logger.exception(msg)
-            raise ValueError
+            raise ValueError(msg)
 
-    def _generate_fit_time_vector(self, v: xr.DataArray):
+        def is_sorted(x):
+            return np.all(x[:-1] <= x[1:])
+
+        if not is_sorted(v[self._time_dimension].values):
+            msg = (
+                f"Time dimension '{self._time_dimension}' is not "
+                "sorted in the right singular vectors 'v'."
+            )
+            logger.exception(msg)
+            raise ValueError(msg)
+
+    def _generate_fit_time_vector(self, v: xr.DataArray) -> np.ndarray:
         """Given the right singular vectors containing the temporal
         information, generate the time vector for the DMD fit.
         """
