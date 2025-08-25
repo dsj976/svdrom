@@ -101,7 +101,8 @@ class OptDMD:
         )
         time_vector = np.cumsum(time_deltas)
         start_time = np.array([0], dtype=f"timedelta64[{self._time_units}]")
-        return np.concat((start_time, time_vector))
+        time_vector = np.concat((start_time, time_vector))
+        return time_vector.astype("float64")
 
     def fit(self, u: xr.DataArray, s: np.ndarray, v: xr.DataArray):
         self._check_svd_inputs(u, s, v)
