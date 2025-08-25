@@ -15,6 +15,13 @@ class DataGenerator:
         ds (xr.Dataset): Generated xarray Dataset (after calling generate_dataset()).
         da (xr.DataArray): Generated xarray DataArray(after calling
             generate_dataarray()).
+        u (xr.DataArray): Left singular vectors from SVD (after calling
+            generate_svd_results()).
+        s (np.ndarray): Singular values from SVD (after calling
+            generate_svd_results()).
+        v (xr.DataArray): Right singular vectors from SVD (after calling
+            generate_svd_results()).
+
     Methods:
         generate_dataset():
             Generates a synthetic xarray.Dataset with random data for each variable
@@ -22,6 +29,9 @@ class DataGenerator:
         generate_dataarray(var: str | None = None):
             Generates a synthetic xarray.DataArray for a specified variable (or the
             first in `vars` by default) with random data and appropriate coordinates.
+        generate_svd_results(n_components: int = -1):
+            Generates synthetic SVD results (u, s, v) from the DataArray. If
+            n_components is -1 (default), all SVD components are returned.
     """
 
     def __init__(
@@ -70,3 +80,26 @@ class DataGenerator:
         )
         data["name"] = var
         self.da = xr.DataArray.from_dict(data)
+
+    def generate_svd_results(self, n_components: int = -1):
+        n_components = len(self.t) if n_components == -1 else n_components
+        self.generate_dataarray()
+        da = self.da.stack(samples=("x", "y", "z"))
+        da = da.transpose("samples", "time")
+
+        u, s, v = np.linalg.svd(da.data, full_matrices=False)
+        u, s, v = u[:, :n_components], s[:n_components], v[:n_components, :]
+
+        dims = ["samples", "components"]
+        coords = {}
+        coords["samples"] = da.coords["samples"]
+        coords["components"] = np.arange(n_components)
+        self.u = xr.DataArray(u, dims=dims, coords=coords)
+
+        self.s = s
+
+        dims = ["components", "time"]
+        coords = {}
+        coords["components"] = np.arange(n_components)
+        coords["time"] = da.coords["time"]
+        self.v = xr.DataArray(v, dims=dims, coords=coords)
