@@ -104,7 +104,7 @@ class OptDMD:
         time_vector = np.concat((start_time, time_vector))
         return time_vector.astype("float64")
 
-    def fit(self, u: xr.DataArray, s: np.ndarray, v: xr.DataArray):
+    def fit(self, u: xr.DataArray, s: np.ndarray, v: xr.DataArray, **kwargs) -> None:
         self._check_svd_inputs(u, s, v)
         if self._n_modes > len(s):
             msg = (
@@ -117,5 +117,17 @@ class OptDMD:
             self._n_modes = len(s)
 
         bopdmd = BOPDMD(
-            svd_rank=self._n_modes, use_proj=True, proj_basis=u[:, : self._n_modes]
+            svd_rank=self._n_modes,
+            use_proj=True,
+            proj_basis=u.data[:, : self._n_modes],
+            **kwargs,
         )
+        t_fit = self._generate_fit_time_vector(v)
+        logger.info("Computing the DMD fit...")
+        try:
+            bopdmd.fit_econ(s[: self._n_modes], v.data[: self._n_modes, :], t_fit)
+            logger.info("Done.")
+        except Exception as e:
+            msg = "Error computing the DMD fit."
+            logger.exception(msg)
+            raise RuntimeError(msg) from e
