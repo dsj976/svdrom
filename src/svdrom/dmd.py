@@ -20,7 +20,7 @@ class OptDMD:
         projection method for nonlinear least squares, with optional
         bootstrap aggregation (bagging) for uncertainty quantification.
 
-        This class makes use of BOPDMD from the PyDMD library
+        This class makes use of the BOPDMD class from the PyDMD library
         (https://pydmd.github.io/PyDMD/bopdmd.html).
 
         Parameters
@@ -41,6 +41,11 @@ class OptDMD:
             "trial_size" many snapshots will be used per trial. If it's a
             float between 0 and 1, then "trial_size" denotes the fraction of
             snapshots to be used per trial. Default is 0.6.
+
+        Notes
+        -----
+        This class is a wrapper of the `BOPDMD.fit_econ()` method, which fits
+        an approximate Optimized DMD on an array X by operating on the SVD of X.
         """
         if n_modes != -1 and n_modes < 1:
             msg = "'n_modes' must be a positive integer or -1."
@@ -70,11 +75,12 @@ class OptDMD:
         self._num_trials = num_trials
         self._trial_size = trial_size
         self._eigs: np.ndarray | None = None
-        self._amplitudes: np.ndarray | None = None
-        self._modes: xr.DataArray | None = None
         self._eigs_std: np.ndarray | None = None
+        self._amplitudes: np.ndarray | None = None
         self._amplitudes_std: np.ndarray | None = None
-        self._modes_std: np.ndarray | None = None
+        self._modes: xr.DataArray | None = None
+        self._modes_std: xr.DataArray | None = None
+        self._solver: BOPDMD | None = None
 
     @property
     def n_modes(self) -> int:
@@ -109,7 +115,7 @@ class OptDMD:
         return self._eigs_std
 
     @property
-    def modes_std(self) -> np.ndarray | None:
+    def modes_std(self) -> xr.DataArray | None:
         """The standard deviation of the DMD modes,
         when using bagging (read-only)."""
         return self._modes_std
