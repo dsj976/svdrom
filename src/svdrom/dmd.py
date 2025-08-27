@@ -141,6 +141,11 @@ class OptDMD:
         """The time units to use in the DMD fit and forecast (read-only)."""
         return self._time_units
 
+    @property
+    def solver(self) -> BOPDMD | None:
+        """The DMD solver instance (read-only)."""
+        return self._solver
+
     def _check_svd_inputs(self, u: xr.DataArray, s: np.ndarray, v: xr.DataArray):
         """Check that the passed SVD results are valid."""
         if not isinstance(u.data, np.ndarray):
@@ -186,7 +191,24 @@ class OptDMD:
         time_vector = np.concat((start_time, time_vector))
         return time_vector.astype("float64")
 
-    def fit(self, u: xr.DataArray, s: np.ndarray, v: xr.DataArray, **kwargs) -> None:
+    def _extract_results(self, bopdmd: BOPDMD, u: xr.DataArray) -> None:
+        """Given the fitted BOPDMD instance and the left singular vectors
+        containing the spatial information, extract the DMD results and
+        store them in the instance attributes."""
+        self._solver = bopdmd
+        self._modes = u.copy(data=bopdmd.modes)  # use new data with original structure
+        self._modes.name = "dmd_modes"
+        self._eigs = bopdmd.eigs
+        self._amplitudes = bopdmd.amplitudes
+        if self.num_trials > 0:
+            self._modes_std = u.copy(data=bopdmd.modes)
+            self._modes_std.name = "dmd_modes_std"
+            self._eigs_std = bopdmd.eigenvalues_std
+            self._amplitudes_std = bopdmd.amplitudes_std
+
+    def fit(
+        self, u: xr.DataArray, s: np.ndarray, v: xr.DataArray, **kwargs
+    ) -> "OptDMD":
         """Fit a OptDMD model to the results of a Singular Value Decomposition (SVD).
 
         Parameters
@@ -229,3 +251,6 @@ class OptDMD:
             msg = "Error computing the DMD fit."
             logger.exception(msg)
             raise RuntimeError(msg) from e
+        self._extract_results(bopdmd, u)
+
+        return self
