@@ -13,9 +13,12 @@ class OptDMD:
         n_modes: int = -1,
         time_dimension: str = "time",
         time_units: str = "s",
+        num_trials: int = 0,
+        trial_size: int | float = 0.6,
     ) -> None:
         """Optimized Dynamic Mode Decomposition (DMD) via variable
-        projection method for nonlinear least squares.
+        projection method for nonlinear least squares, with optional
+        bootstrap aggregation (bagging) for uncertainty quantification.
 
         This class makes use of BOPDMD from the PyDMD library
         (https://pydmd.github.io/PyDMD/bopdmd.html).
@@ -30,6 +33,14 @@ class OptDMD:
         time_units: str
             Units of the time dimension. Default is "s".
             Must be one of {"s", "h"}, where "s" is seconds and "h" is hours.
+        num_trials: int
+            Number of bagging trials to perform. Default is 0 (no bagging).
+        trial_size: int | float
+            Size of the randomly selected subset of snapshots to use for
+            each trial of bagged optimized DMD. If it's a positive integer,
+            "trial_size" many snapshots will be used per trial. If it's a
+            float between 0 and 1, then "trial_size" denotes the fraction of
+            snapshots to be used per trial. Default is 0.6.
         """
         if n_modes != -1 and n_modes < 1:
             msg = "'n_modes' must be a positive integer or -1."
@@ -39,12 +50,31 @@ class OptDMD:
             msg = "'time_units' must be one of {'s', 'h'}."
             logger.exception(msg)
             raise ValueError(msg)
+        if num_trials < 0 or not isinstance(num_trials, int):
+            msg = "'num_trials' must be an integer greater than zero."
+            logger.exception(msg)
+            raise ValueError(msg)
+        if (
+            isinstance(trial_size, float)
+            and (trial_size <= 0 or trial_size >= 1)
+            or isinstance(trial_size, int)
+            and trial_size <= 0
+        ):
+            msg = "'trial_size' must be a positive integer or a float between 0 and 1."
+            logger.exception(msg)
+            raise ValueError(msg)
+
         self._n_modes = n_modes
         self._time_dimension = time_dimension
         self._time_units = time_units
+        self._num_trials = num_trials
+        self._trial_size = trial_size
         self._eigs: np.ndarray | None = None
         self._amplitudes: np.ndarray | None = None
         self._modes: xr.DataArray | None = None
+        self._eigs_std: np.ndarray | None = None
+        self._amplitudes_std: np.ndarray | None = None
+        self._modes_std: np.ndarray | None = None
 
     @property
     def n_modes(self) -> int:
@@ -70,6 +100,35 @@ class OptDMD:
     def amplitudes(self) -> np.ndarray | None:
         """The DMD amplitudes (read-only)."""
         return self._amplitudes
+
+    @property
+    def eigs_std(self) -> np.ndarray | None:
+        """The standard deviation of the DMD eigenvalues,
+        when using bagging (read-only).
+        """
+        return self._eigs_std
+
+    @property
+    def modes_std(self) -> np.ndarray | None:
+        """The standard deviation of the DMD modes,
+        when using bagging (read-only)."""
+        return self._modes_std
+
+    @property
+    def amplitudes_std(self) -> np.ndarray | None:
+        """The standard deviation of the DMD amplitudes,
+        when using bagging (read-only)."""
+        return self._amplitudes_std
+
+    @property
+    def num_trials(self) -> int:
+        """The number of bagging trials (read-only)."""
+        return self._num_trials
+
+    @property
+    def trial_size(self) -> int | float:
+        """The bagging trial size (read-only)."""
+        return self._trial_size
 
     @property
     def time_units(self) -> str:
@@ -151,6 +210,8 @@ class OptDMD:
             svd_rank=self._n_modes,
             use_proj=True,
             proj_basis=u.data[:, : self._n_modes],
+            num_trials=self._num_trials,
+            trial_size=self._trial_size,
             **kwargs,
         )
         t_fit = self._generate_fit_time_vector(v)
