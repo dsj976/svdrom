@@ -196,8 +196,7 @@ class OptDMD:
         )
         time_vector = np.cumsum(time_deltas)
         start_time = np.array([0], dtype=f"timedelta64[{self._time_units}]")
-        time_vector = np.concat((start_time, time_vector))
-        return time_vector.astype("float64")
+        return np.concat((start_time, time_vector))
 
     def _extract_results(self, bopdmd: BOPDMD, u: xr.DataArray) -> None:
         """Given the fitted BOPDMD instance and the left singular vectors
