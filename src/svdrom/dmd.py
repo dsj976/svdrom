@@ -81,6 +81,9 @@ class OptDMD:
         self._modes: xr.DataArray | None = None
         self._modes_std: xr.DataArray | None = None
         self._solver: BOPDMD | None = None
+        self._is_fitted: bool = False
+        self._t_fit: np.ndarray | None = None
+        self._t_forecast: np.ndarray | None = None
 
     @property
     def n_modes(self) -> int:
@@ -145,6 +148,11 @@ class OptDMD:
     def solver(self) -> BOPDMD | None:
         """The DMD solver instance (read-only)."""
         return self._solver
+
+    @property
+    def is_fitted(self) -> bool:
+        """Whether an optimized DMD model has been fitted (read-only)."""
+        return self._is_fitted
 
     def _check_svd_inputs(self, u: xr.DataArray, s: np.ndarray, v: xr.DataArray):
         """Check that the passed SVD results are valid."""
@@ -242,15 +250,20 @@ class OptDMD:
             trial_size=self._trial_size,
             **kwargs,
         )
-        t_fit = self._generate_fit_time_vector(v)
+        self._t_fit = self._generate_fit_time_vector(v)
         logger.info("Computing the DMD fit...")
         try:
-            bopdmd.fit_econ(s[: self._n_modes], v.data[: self._n_modes, :], t_fit)
-            logger.info("Done.")
+            bopdmd.fit_econ(
+                s[: self._n_modes],
+                v.data[: self._n_modes, :],
+                self._t_fit.astype("float64"),
+            )
         except Exception as e:
             msg = "Error computing the DMD fit."
             logger.exception(msg)
             raise RuntimeError(msg) from e
+        logger.info("Done.")
+        self._is_fitted = True
         self._extract_results(bopdmd, u)
 
         return self
