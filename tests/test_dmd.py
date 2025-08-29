@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 import xarray as xr
 from make_test_data import DataGenerator
 
@@ -72,4 +73,28 @@ def test_fit_outputs():
     assert optdmd.amplitudes.shape == (optdmd.modes.shape[1],), (
         f"Expected 'optdmd.amplitudes.shape' to be {(optdmd.modes.shape[1],)}, "
         f"but got {optdmd.amplitudes.shape} instead."
+    )
+
+
+@pytest.mark.parametrize("forecast_span", ["10 s", 10])
+@pytest.mark.parametrize("dt", ["1 s", 10, None])
+def test_generate_forecast_time_vector(forecast_span, dt):
+    """Test the method to generate the forecast time vector."""
+    t_forecast = optdmd._generate_forecast_time_vector(forecast_span, dt)
+    assert isinstance(t_forecast, np.ndarray), (
+        "Expected 't_forecast' to be of type 'np.ndarray', "
+        f"but got {type(t_forecast)} instead."
+    )
+    assert np.unique(np.diff(t_forecast)) == np.timedelta64(1, "s"), (
+        "Expected the time difference between consecutive elements in "
+        "'t_forecast' to be one second, but got "
+        f"{np.unique(np.diff(t_forecast))} instead."
+    )
+    assert len(t_forecast) == 10, (
+        "Expected the length of 't_forecast' to be 10, but got "
+        f"{len(t_forecast)} instead."
+    )
+    assert t_forecast[0] == optdmd.t_fit[-1] + np.timedelta64(1, "s"), (
+        "Expected 't_forecast[0]' to be one second ahead"
+        f"of t_fit[-1], but got {t_forecast[0]} instead."
     )

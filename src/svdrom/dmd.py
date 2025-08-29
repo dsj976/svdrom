@@ -1,3 +1,5 @@
+from typing import Literal
+
 import numpy as np
 import xarray as xr
 from pydmd import BOPDMD
@@ -12,7 +14,7 @@ class OptDMD:
         self,
         n_modes: int = -1,
         time_dimension: str = "time",
-        time_units: str = "s",
+        time_units: Literal["s", "h"] = "s",
         num_trials: int = 0,
         trial_size: int | float = 0.6,
     ) -> None:
@@ -208,6 +210,76 @@ class OptDMD:
         start_time = np.array([0], dtype=f"timedelta64[{self._time_units}]")
         self._t_fit = np.concat((start_time, time_vector))
         return self._t_fit
+
+    def _generate_forecast_time_vector(
+        self, forecast_span: str | int, dt: str | int | None = None
+    ) -> np.ndarray:
+        """Given a forecast time span and time step, generate the time vector
+        for the DMD forecast.
+
+        Parameters
+        ----------
+        forecast_span: str | int
+            The total time span for the forecast. If int, interpreted as time
+            in the model's time units. If str, should be in the format "value units",
+            e.g. "30 D" for 30 days.
+        dt: str | int | None, optional
+            The time step or number of points for the forecast. If str, should be in
+            the format "value units", e.g. "1 h" for 1 hour. If int, interpreted as
+            number of forecast points. If None, uses the average time step of the
+            training data.
+        """
+        # parse forecast_span
+        if isinstance(forecast_span, int):
+            span = np.timedelta64(forecast_span, self._time_units)
+        else:
+            span_parts = forecast_span.split(" ")
+            if len(span_parts) != 2:
+                msg = (
+                    "String forecast_span must be in the format 'value units', "
+                    "e.g. '30 D'."
+                )
+                raise ValueError(msg)
+            span = np.timedelta64(int(span_parts[0]), span_parts[1])  # type: ignore[call-overload]
+        if self._t_fit is None:
+            msg = "The DMD fit time vector (_t_fit) is not initialized."
+            raise ValueError(msg)
+        forecast_start = self._t_fit[-1]
+        forecast_end = forecast_start + span
+
+        # determine time step
+        if dt is None:
+            # use average time step of training data
+            if len(self._t_fit) > 1:
+                time_step = np.mean(np.diff(self._t_fit))
+            else:
+                msg = (
+                    "Cannot determine time step from training data "
+                    "with only one time point."
+                )
+                raise ValueError(msg)
+        elif isinstance(dt, str):
+            # parse time step string
+            dt_parts = dt.split(" ")
+            if len(dt_parts) != 2:
+                msg = "String dt must be in the format 'value units', e.g. '1 h'."
+                raise ValueError(msg)
+            time_step = np.timedelta64(int(dt_parts[0]), dt_parts[1])  # type: ignore[call-overload]
+        else:
+            # dt is an int and specifies number of points
+            if dt <= 0:
+                msg = "Number of forecast points must be positive."
+                raise ValueError(msg)
+            # calculate time step to get the requested number of points
+            time_step = span / dt
+
+        self._t_forecast = np.arange(
+            forecast_start + time_step,
+            forecast_end + time_step,
+            time_step,
+        )
+
+        return self._t_forecast
 
     def _extract_results(self, bopdmd: BOPDMD, u: xr.DataArray) -> None:
         """Given the fitted BOPDMD instance and the left singular vectors
