@@ -10,8 +10,8 @@ generator.generate_svd_results(n_components=10)
 optdmd = OptDMD()
 
 
-def test_basic():
-    """Basic test for the OptDMD class."""
+def test_fit_basic():
+    """Basic test for the fit() method of the OptDMD class."""
     optdmd.fit(
         generator.u,
         generator.s,
@@ -32,6 +32,7 @@ def test_basic():
     assert hasattr(
         optdmd, "amplitudes_std"
     ), "OptDMD object is missing the 'amplitudes_std' attribute."
+    assert hasattr(optdmd, "t_fit"), "OptDMD object is missing the 't_fit' attribute."
 
 
 def test_fit_outputs():

@@ -150,6 +150,16 @@ class OptDMD:
         return self._solver
 
     @property
+    def t_fit(self) -> np.ndarray | None:
+        """The time vector for the DMD fit (read-only)."""
+        return self._t_fit
+
+    @property
+    def t_forecast(self) -> np.ndarray | None:
+        """The time vector for the DMD forecast (read-only)."""
+        return self._t_forecast
+
+    @property
     def is_fitted(self) -> bool:
         """Whether an optimized DMD model has been fitted (read-only)."""
         return self._is_fitted
