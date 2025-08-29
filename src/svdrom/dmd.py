@@ -206,7 +206,8 @@ class OptDMD:
         )
         time_vector = np.cumsum(time_deltas)
         start_time = np.array([0], dtype=f"timedelta64[{self._time_units}]")
-        return np.concat((start_time, time_vector))
+        self._t_fit = np.concat((start_time, time_vector))
+        return self._t_fit
 
     def _extract_results(self, bopdmd: BOPDMD, u: xr.DataArray) -> None:
         """Given the fitted BOPDMD instance and the left singular vectors
@@ -259,13 +260,13 @@ class OptDMD:
             trial_size=self._trial_size,
             **kwargs,
         )
-        self._t_fit = self._generate_fit_time_vector(v)
+        t_fit = self._generate_fit_time_vector(v)
         logger.info("Computing the DMD fit...")
         try:
             bopdmd.fit_econ(
                 s[: self._n_modes],
                 v.data[: self._n_modes, :],
-                self._t_fit.astype("float64"),
+                t_fit.astype("float64"),
             )
         except Exception as e:
             msg = "Error computing the DMD fit."
