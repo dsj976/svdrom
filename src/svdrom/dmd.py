@@ -301,7 +301,7 @@ class OptDMD:
         self._eigs = bopdmd.eigs
         self._amplitudes = bopdmd.amplitudes
         if self.num_trials > 0:
-            self._modes_std = u.copy(data=bopdmd.modes)
+            self._modes_std = u.copy(data=bopdmd.modes_std)
             self._modes_std.name = "dmd_modes_std"
             self._eigs_std = bopdmd.eigenvalues_std
             self._amplitudes_std = bopdmd.amplitudes_std
