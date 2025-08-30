@@ -366,3 +366,33 @@ class OptDMD:
         self._is_fitted = True
 
         return self
+
+    def forecast(self, forecast_span: str | int, dt: str | int | None):
+        if self._solver is None:
+            msg = "The OptDMD model must be fitted before forecasting."
+            logger.exception(msg)
+            raise RuntimeError(msg)
+        try:
+            t_forecast = self._generate_forecast_time_vector(forecast_span, dt)
+        except Exception as e:
+            msg = "Error trying to generate the forecast time vector."
+            logger.exception(msg)
+            raise RuntimeError(msg) from e
+        logger.info("Computing the DMD forecast...")
+        try:
+            forecast = self._solver.forecast(t_forecast.astype("float64"))
+            if self.num_trials == 0:
+                assert isinstance(forecast, np.ndarray), (
+                    "Without bagging, expected the forecast to return "
+                    "a single numpy.ndarray."
+                )
+            else:
+                assert isinstance(forecast, tuple), (
+                    "With bagging, expected the forecast to return "
+                    "two numpy.ndarray."
+                )
+        except Exception as e:
+            msg = "Error computing the DMD forecast."
+            logger.exception(msg)
+            raise RuntimeError(msg) from e
+        logger.info("Done.")

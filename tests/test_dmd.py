@@ -124,3 +124,12 @@ def test_generate_forecast_time_vector(forecast_span, dt):
         "Expected 'time_forecast[0]' to be one second ahead of time_fit[-1], "
         f"but got {optdmd.time_forecast[0] - optdmd.time_fit[-1]} instead."
     )
+
+
+def test_forecast_basic():
+    """Basic test for the forecast() method."""
+    forecast = optdmd.forecast(forecast_span="10 s", dt="1 s")
+    assert isinstance(optdmd.time_forecast, np.ndarray), (
+        "Expected 'optdmd.time_forecast' to be of type 'np.ndarray', "
+        f"but got {type(optdmd.time_forecast)} instead."
+    )
