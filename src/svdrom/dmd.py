@@ -360,7 +360,61 @@ class OptDMD:
 
         return self
 
-    def forecast(self, forecast_span: str | int, dt: str | int | None):
+    def _forecast_to_dataarray(
+        self, forecast: np.ndarray | tuple[np.ndarray, np.ndarray]
+    ) -> xr.DataArray | tuple[xr.DataArray, xr.DataArray]:
+        """Given a single numpy.ndarray consisting of a single DMD forecast,
+        or a tuple of two numpy.ndarray where the first one corresponds to
+        the ensemble mean forecast and the second one corresponds to the
+        ensemble variance, convert the input into xarray.DataArray with the
+        corresponding format.
+        """
+        if self._modes is None:
+            msg = "The DMD modes have not been computed."
+            raise RuntimeError(msg)
+
+        dims = (self._modes.dims[0], self._time_dimension)
+        coords = {k: v for k, v in self._modes.coords.items() if k != "components"}
+        coords[self._time_dimension] = self._time_forecast
+        if isinstance(forecast, np.ndarray):
+            self._forecast = xr.DataArray(
+                forecast, dims=dims, coords=coords, name="dmd_forecast"
+            )
+            return self._forecast
+        self._forecast = xr.DataArray(
+            forecast[0], dims=dims, coords=coords, name="dmd_forecast_mean"
+        )
+        self._forecast_var = xr.DataArray(
+            forecast[1], dims=dims, coords=coords, name="dmd_forecast_var"
+        )
+        return self._forecast, self._forecast_var
+
+    def forecast(
+        self, forecast_span: str | int, dt: str | int | None
+    ) -> xr.DataArray | tuple[xr.DataArray, xr.DataArray]:
+        """
+        Generates a forecast using the fitted OptDMD model over a specified time span.
+        The model must be fitted before calling this method.
+
+        Parameters
+        ----------
+        forecast_span: str | int
+            The total time span for the forecast. If int, interpreted as time
+            in the model's time units. If str, should be in the format "value units",
+            e.g. "30 D" for 30 days.
+        dt: str | int | None, optional
+            The time step or number of time points for the forecast. If str, should be
+            in the format "value units", e.g. "1 h" for 1 hour. If int, interpreted as
+            number of forecast points. If None, uses the average time step of the
+            training data on which the DMD model was fitted.
+
+        Returns
+        -------
+        xarray.DataArray | tuple[xarray.DataArray, xarray.DataArray]
+            The forecasted data as an xarray.DataArray. If bagging is used, two
+            xarray.DataArray are returned where the first one is the ensemble mean
+            and the second one is the ensemble variance.
+        """
         if self._solver is None:
             msg = "The OptDMD model must be fitted before forecasting."
             logger.exception(msg)
@@ -393,3 +447,11 @@ class OptDMD:
             logger.exception(msg)
             raise RuntimeError(msg) from e
         logger.info("Done.")
+        try:
+            forecast = self._forecast_to_dataarray(forecast)
+        except Exception as e:
+            msg = "Error trying to convert forecast into xarray.DataArray."
+            logger.exception(msg)
+            raise RuntimeError(msg) from e
+
+        return forecast
