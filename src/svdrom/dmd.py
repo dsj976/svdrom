@@ -384,6 +384,10 @@ class OptDMD:
                     "With bagging, expected the forecast to return "
                     "two numpy.ndarray."
                 )
+                assert len(forecast) == 2, (
+                    "With bagging, expected the forecast to return "
+                    "two numpy.ndarray."
+                )
         except Exception as e:
             msg = "Error computing the DMD forecast."
             logger.exception(msg)
