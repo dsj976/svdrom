@@ -83,7 +83,6 @@ class OptDMD:
         self._modes: xr.DataArray | None = None
         self._modes_std: xr.DataArray | None = None
         self._solver: BOPDMD | None = None
-        self._is_fitted: bool = False
         self._time_fit: np.ndarray | None = None
         self._t_fit: np.ndarray | None = None  # internal use only
         self._time_forecast: np.ndarray | None = None
@@ -162,11 +161,6 @@ class OptDMD:
     def time_forecast(self) -> np.ndarray | None:
         """The time vector for the DMD forecast (read-only)."""
         return self._time_forecast
-
-    @property
-    def is_fitted(self) -> bool:
-        """Whether an optimized DMD model has been fitted (read-only)."""
-        return self._is_fitted
 
     def _check_svd_inputs(self, u: xr.DataArray, s: np.ndarray, v: xr.DataArray):
         """Check that the passed SVD results are valid."""
@@ -363,7 +357,6 @@ class OptDMD:
             raise RuntimeError(msg) from e
         logger.info("Done.")
         self._extract_results(bopdmd, u)
-        self._is_fitted = True
 
         return self
 
