@@ -339,11 +339,12 @@ class OptDMD:
             raise ValueError(msg)
         if self._n_modes == -1:
             self._n_modes = len(s)
+        u, s, v = u[:, : self._n_modes], s[: self._n_modes], v[: self._n_modes, :]
 
         bopdmd = BOPDMD(
             svd_rank=self._n_modes,
             use_proj=True,
-            proj_basis=u.data[:, : self._n_modes],
+            proj_basis=u.data,
             num_trials=self._num_trials,
             trial_size=self._trial_size,
             **kwargs,
@@ -352,8 +353,8 @@ class OptDMD:
         logger.info("Computing the DMD fit...")
         try:
             bopdmd.fit_econ(
-                s[: self._n_modes],
-                v.data[: self._n_modes, :],
+                s,
+                v.data,
                 t_fit.astype("float64"),
             )
         except Exception as e:
