@@ -33,7 +33,12 @@ def test_fit_basic():
     assert hasattr(
         optdmd, "amplitudes_std"
     ), "OptDMD object is missing the 'amplitudes_std' attribute."
-    assert hasattr(optdmd, "t_fit"), "OptDMD object is missing the 't_fit' attribute."
+    assert hasattr(
+        optdmd, "time_fit"
+    ), "OptDMD object is missing the 'time_fit' attribute."
+    assert hasattr(
+        optdmd, "time_forecast"
+    ), "OptDMD object is missing the 'time_forecast' attribute."
 
 
 def test_fit_outputs():
@@ -50,6 +55,10 @@ def test_fit_outputs():
     assert isinstance(optdmd.amplitudes, np.ndarray), (
         "Expected 'optdmd.amplitudes' to be of type 'np.ndarray', "
         f"but got {type(optdmd.amplitudes)} instead."
+    )
+    assert isinstance(optdmd.time_fit, np.ndarray), (
+        "Expected 'optdmd.time_fit' to be of type 'np.ndarray', "
+        f"but got {type(optdmd.time_fit)} instead."
     )
     assert optdmd.modes_std is None, (
         "Expected 'optdmd.modes_std' to be None, "
@@ -85,16 +94,33 @@ def test_generate_forecast_time_vector(forecast_span, dt):
         "Expected 't_forecast' to be of type 'np.ndarray', "
         f"but got {type(t_forecast)} instead."
     )
+    assert isinstance(optdmd.time_forecast, np.ndarray), (
+        "Expected 'time_forecast' to be of type 'np.ndarray', "
+        f"but got {type(optdmd.time_forecast)} instead."
+    )
     assert np.unique(np.diff(t_forecast)) == np.timedelta64(1, "s"), (
         "Expected the time difference between consecutive elements in "
         "'t_forecast' to be one second, but got "
         f"{np.unique(np.diff(t_forecast))} instead."
     )
+    assert np.unique(np.diff(optdmd.time_forecast)) == np.timedelta64(1, "s"), (
+        "Expected the time difference between consecutive elements in "
+        "'time_forecast' to be one second, but got "
+        f"{np.unique(np.diff(optdmd.time_forecast))} instead."
+    )
     assert len(t_forecast) == 10, (
         "Expected the length of 't_forecast' to be 10, but got "
         f"{len(t_forecast)} instead."
     )
-    assert t_forecast[0] == optdmd.t_fit[-1] + np.timedelta64(1, "s"), (
+    assert len(optdmd.time_forecast) == 10, (
+        "Expected the length of 'time_forecast' to be 10, but got "
+        f"{len(optdmd.time_forecast)} instead."
+    )
+    assert t_forecast[0] == optdmd._t_fit[-1] + np.timedelta64(1, "s"), (
         "Expected 't_forecast[0]' to be one second ahead"
-        f"of t_fit[-1], but got {t_forecast[0]} instead."
+        f"of t_fit[-1], but got {t_forecast[0] - optdmd._t_fit[-1]} instead."
+    )
+    assert optdmd.time_forecast[0] == optdmd.time_fit[-1] + np.timedelta64(1, "s"), (
+        "Expected 'time_forecast[0]' to be one second ahead of time_fit[-1], "
+        f"but got {optdmd.time_forecast[0] - optdmd.time_fit[-1]} instead."
     )

@@ -33,7 +33,7 @@ class OptDMD:
         time_dimension: str
             Name of the time dimension in the input data. Default is "time".
         time_units: str
-            Units of the time dimension. Default is "s".
+            Units in which to treat the time dimension. Default is "s".
             Must be one of {"s", "h"}, where "s" is seconds and "h" is hours.
         num_trials: int
             Number of bagging trials to perform. Default is 0 (no bagging).
@@ -84,8 +84,10 @@ class OptDMD:
         self._modes_std: xr.DataArray | None = None
         self._solver: BOPDMD | None = None
         self._is_fitted: bool = False
-        self._t_fit: np.ndarray | None = None
-        self._t_forecast: np.ndarray | None = None
+        self._time_fit: np.ndarray | None = None
+        self._t_fit: np.ndarray | None = None  # internal use only
+        self._time_forecast: np.ndarray | None = None
+        self._t_forecast: np.ndarray | None = None  # internal use only
 
     @property
     def n_modes(self) -> int:
@@ -152,14 +154,14 @@ class OptDMD:
         return self._solver
 
     @property
-    def t_fit(self) -> np.ndarray | None:
+    def time_fit(self) -> np.ndarray | None:
         """The time vector for the DMD fit (read-only)."""
-        return self._t_fit
+        return self._time_fit
 
     @property
-    def t_forecast(self) -> np.ndarray | None:
+    def time_forecast(self) -> np.ndarray | None:
         """The time vector for the DMD forecast (read-only)."""
-        return self._t_forecast
+        return self._time_forecast
 
     @property
     def is_fitted(self) -> bool:
@@ -203,12 +205,14 @@ class OptDMD:
         """Given the right singular vectors containing the temporal
         information, generate the time vector for the DMD fit.
         """
-        time_deltas = np.diff(v[self._time_dimension].values).astype(
-            f"timedelta64[{self._time_units}]"
-        )
+        time_fit = v[self._time_dimension].values
+        time_deltas = np.diff(time_fit).astype(f"timedelta64[{self._time_units}]")
         time_vector = np.cumsum(time_deltas)
         start_time = np.array([0], dtype=f"timedelta64[{self._time_units}]")
-        self._t_fit = np.concat((start_time, time_vector))
+        self._time_fit = time_fit  # vector representing true time of the training data
+        self._t_fit = np.concat(
+            (start_time, time_vector)
+        )  # vector to be fed to the `fit()` call
         return self._t_fit
 
     def _generate_forecast_time_vector(
@@ -229,10 +233,15 @@ class OptDMD:
             number of forecast points. If None, uses the average time step of the
             training data.
         """
+        if self._t_fit is None or self._time_fit is None:
+            msg = "The DMD fit time vector is not initialized."
+            raise ValueError(msg)
+
         # parse forecast_span
         if isinstance(forecast_span, int):
             span = np.timedelta64(forecast_span, self._time_units)
         else:
+            # forecast_span is a string
             span_parts = forecast_span.split(" ")
             if len(span_parts) != 2:
                 msg = (
@@ -241,11 +250,6 @@ class OptDMD:
                 )
                 raise ValueError(msg)
             span = np.timedelta64(int(span_parts[0]), span_parts[1])  # type: ignore[call-overload]
-        if self._t_fit is None:
-            msg = "The DMD fit time vector (_t_fit) is not initialized."
-            raise ValueError(msg)
-        forecast_start = self._t_fit[-1]
-        forecast_end = forecast_start + span
 
         # determine time step
         if dt is None:
@@ -273,6 +277,18 @@ class OptDMD:
             # calculate time step to get the requested number of points
             time_step = span / dt
 
+        # generate the time vector representing true time of the forecast
+        forecast_start = self._time_fit[-1]
+        forecast_end = forecast_start + span
+        self._time_forecast = np.arange(
+            forecast_start + time_step,
+            forecast_end + time_step,
+            time_step,
+        )
+
+        # generate the time vector to be fed to the `forecast()` call
+        forecast_start = self._t_fit[-1]
+        forecast_end = forecast_start + span
         self._t_forecast = np.arange(
             forecast_start + time_step,
             forecast_end + time_step,
@@ -345,7 +361,7 @@ class OptDMD:
             logger.exception(msg)
             raise RuntimeError(msg) from e
         logger.info("Done.")
-        self._is_fitted = True
         self._extract_results(bopdmd, u)
+        self._is_fitted = True
 
         return self
