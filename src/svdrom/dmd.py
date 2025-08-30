@@ -87,6 +87,8 @@ class OptDMD:
         self._t_fit: np.ndarray | None = None  # internal use only
         self._time_forecast: np.ndarray | None = None
         self._t_forecast: np.ndarray | None = None  # internal use only
+        self._forecast: xr.DataArray | None = None
+        self._forecast_var: xr.DataArray | None = None
 
     @property
     def n_modes(self) -> int:
@@ -161,6 +163,16 @@ class OptDMD:
     def time_forecast(self) -> np.ndarray | None:
         """The time vector for the DMD forecast (read-only)."""
         return self._time_forecast
+
+    @property
+    def forecast_result(self) -> xr.DataArray | None:
+        """The DMD forecast (read-only)."""
+        return self._forecast
+
+    @property
+    def forecast_var(self) -> xr.DataArray | None:
+        """The variance of the DMD forecast (read-only)."""
+        return self._forecast_var
 
     def _check_svd_inputs(self, u: xr.DataArray, s: np.ndarray, v: xr.DataArray):
         """Check that the passed SVD results are valid."""

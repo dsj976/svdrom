@@ -11,14 +11,8 @@ generator.generate_svd_results(n_components=10)
 optdmd = OptDMD()
 
 
-def test_fit_basic():
-    """Basic test for the fit() method of the OptDMD class."""
-    optdmd.fit(
-        generator.u,
-        generator.s,
-        generator.v,
-        varpro_opts_dict={"maxiter": 3},
-    )
+def test_basic():
+    """Basic test for the OptDMD class."""
     assert hasattr(optdmd, "modes"), "OptDMD object is missing the 'modes' attribute."
     assert hasattr(optdmd, "eigs"), "OptDMD object is missing the 'eigs' attribute."
     assert hasattr(
@@ -39,6 +33,22 @@ def test_fit_basic():
     assert hasattr(
         optdmd, "time_forecast"
     ), "OptDMD object is missing the 'time_forecast' attribute."
+    assert hasattr(
+        optdmd, "forecast_result"
+    ), "OptDMD object is missing the 'forecast_result' attribute."
+    assert hasattr(
+        optdmd, "forecast_var"
+    ), "OptDMD object is missing the 'forecast_var' attribute."
+
+
+def test_fit_basic():
+    """Test the fit() method of the OptDMD class."""
+    optdmd.fit(
+        generator.u,
+        generator.s,
+        generator.v,
+        varpro_opts_dict={"maxiter": 3},
+    )
 
 
 def test_fit_outputs():
@@ -126,9 +136,16 @@ def test_generate_forecast_time_vector(forecast_span, dt):
     )
 
 
-def test_forecast_basic():
-    """Basic test for the forecast() method."""
+def test_forecast():
+    """Test for the forecast() method."""
     forecast = optdmd.forecast(forecast_span="10 s", dt="1 s")
+    assert isinstance(forecast, xr.DataArray), (
+        "Expected 'forecast' to be of type 'xr.DataArray', "
+        f"but got {type(forecast)} instead."
+    )
+
+
+def test_forecast_outputs():
     assert isinstance(optdmd.time_forecast, np.ndarray), (
         "Expected 'optdmd.time_forecast' to be of type 'np.ndarray', "
         f"but got {type(optdmd.time_forecast)} instead."
