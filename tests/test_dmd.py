@@ -9,90 +9,107 @@ generator = DataGenerator()
 generator.generate_svd_results(n_components=10)
 
 optdmd = OptDMD()
+optdmd_bagging = OptDMD(num_trials=5)
 
 
-def test_basic():
+@pytest.mark.parametrize("solver", [optdmd, optdmd_bagging])
+def test_basic(solver):
     """Basic test for the OptDMD class."""
-    assert hasattr(optdmd, "modes"), "OptDMD object is missing the 'modes' attribute."
-    assert hasattr(optdmd, "eigs"), "OptDMD object is missing the 'eigs' attribute."
+    assert hasattr(solver, "modes"), "OptDMD object is missing the 'modes' attribute."
+    assert hasattr(solver, "eigs"), "OptDMD object is missing the 'eigs' attribute."
     assert hasattr(
-        optdmd, "amplitudes"
+        solver, "amplitudes"
     ), "OptDMD object is missing the 'amplitudes' attribute."
     assert hasattr(
-        optdmd, "modes_std"
+        solver, "modes_std"
     ), "OptDMD object is missing the 'modes_std' attribute."
     assert hasattr(
-        optdmd, "eigs_std"
+        solver, "eigs_std"
     ), "OptDMD object is missing the 'eigs_std' attribute."
     assert hasattr(
-        optdmd, "amplitudes_std"
+        solver, "amplitudes_std"
     ), "OptDMD object is missing the 'amplitudes_std' attribute."
     assert hasattr(
-        optdmd, "time_fit"
+        solver, "time_fit"
     ), "OptDMD object is missing the 'time_fit' attribute."
     assert hasattr(
-        optdmd, "time_forecast"
+        solver, "time_forecast"
     ), "OptDMD object is missing the 'time_forecast' attribute."
     assert hasattr(
-        optdmd, "forecast_result"
+        solver, "forecast_result"
     ), "OptDMD object is missing the 'forecast_result' attribute."
     assert hasattr(
-        optdmd, "forecast_var"
+        solver, "forecast_var"
     ), "OptDMD object is missing the 'forecast_var' attribute."
 
 
-def test_fit_basic():
+@pytest.mark.parametrize("solver", [optdmd, optdmd_bagging])
+def test_fit_basic(solver):
     """Test the fit() method of the OptDMD class."""
-    optdmd.fit(
+    solver.fit(
         generator.u,
         generator.s,
         generator.v,
-        varpro_opts_dict={"maxiter": 3},
+        varpro_opts_dict={"maxiter": 5},
     )
 
 
-def test_fit_outputs():
+@pytest.mark.parametrize("solver", [optdmd, optdmd_bagging])
+def test_fit_outputs(solver):
     """Test data types and shapes of attributes after
     calling the fit() method."""
-    assert isinstance(optdmd.modes, xr.DataArray), (
-        "Expected 'optdmd.modes' to be of type 'xr.DataArray', "
-        f"but got {type(optdmd.modes)} instead."
+    assert isinstance(solver.modes, xr.DataArray), (
+        "Expected 'modes' to be of type 'xr.DataArray', "
+        f"but got {type(solver.modes)} instead."
     )
-    assert isinstance(optdmd.eigs, np.ndarray), (
-        "Expected 'optdmd.eigs' to be of type 'np.ndarray', "
-        f"but got {type(optdmd.eigs)} instead."
+    assert isinstance(solver.eigs, np.ndarray), (
+        "Expected 'eigs' to be of type 'np.ndarray', "
+        f"but got {type(solver.eigs)} instead."
     )
-    assert isinstance(optdmd.amplitudes, np.ndarray), (
-        "Expected 'optdmd.amplitudes' to be of type 'np.ndarray', "
-        f"but got {type(optdmd.amplitudes)} instead."
+    assert isinstance(solver.amplitudes, np.ndarray), (
+        "Expected 'amplitudes' to be of type 'np.ndarray', "
+        f"but got {type(solver.amplitudes)} instead."
     )
-    assert isinstance(optdmd.time_fit, np.ndarray), (
-        "Expected 'optdmd.time_fit' to be of type 'np.ndarray', "
-        f"but got {type(optdmd.time_fit)} instead."
-    )
-    assert optdmd.modes_std is None, (
-        "Expected 'optdmd.modes_std' to be None, "
-        f"but got {optdmd.modes_std} instead."
-    )
-    assert optdmd.eigs_std is None, (
-        "Expected 'optdmd.eigs_std' to be None, " f"but got {optdmd.eigs_std} instead."
-    )
-    assert optdmd.amplitudes_std is None, (
-        "Expected 'optdmd.amplitudes_std' to be None, "
-        f"but got {optdmd.amplitudes_std} instead."
+    assert isinstance(solver.time_fit, np.ndarray), (
+        "Expected 'time_fit' to be of type 'np.ndarray', "
+        f"but got {type(solver.time_fit)} instead."
     )
     assert optdmd.modes.shape == generator.u.shape, (
-        f"Expected 'optdmd.modes.shape' to be {generator.u.shape}, "
-        f"but got {optdmd.modes.shape} instead."
+        f"Expected 'modes.shape' to be {generator.u.shape}, "
+        f"but got {solver.modes.shape} instead."
     )
-    assert optdmd.eigs.shape == (optdmd.modes.shape[1],), (
-        f"Expected 'optdmd.eigs.shape' to be {(optdmd.modes.shape[1],)}, "
-        f"but got {optdmd.eigs.shape} instead."
+    assert solver.eigs.shape == (solver.modes.shape[1],), (
+        f"Expected 'eigs.shape' to be {(solver.modes.shape[1],)}, "
+        f"but got {solver.eigs.shape} instead."
     )
-    assert optdmd.amplitudes.shape == (optdmd.modes.shape[1],), (
-        f"Expected 'optdmd.amplitudes.shape' to be {(optdmd.modes.shape[1],)}, "
-        f"but got {optdmd.amplitudes.shape} instead."
+    assert solver.amplitudes.shape == (solver.modes.shape[1],), (
+        f"Expected 'amplitudes.shape' to be {(solver.modes.shape[1],)}, "
+        f"but got {solver.amplitudes.shape} instead."
     )
+    if solver.num_trials == 0:
+        assert solver.modes_std is None, (
+            "Expected 'modes_std' to be None, " f"but got {solver.modes_std} instead."
+        )
+        assert solver.eigs_std is None, (
+            "Expected 'eigs_std' to be None, " f"but got {solver.eigs_std} instead."
+        )
+        assert solver.amplitudes_std is None, (
+            "Expected 'amplitudes_std' to be None, "
+            f"but got {solver.amplitudes_std} instead."
+        )
+    else:
+        assert isinstance(solver.modes_std, xr.DataArray), (
+            "Expected 'modes_std' to be xr.DataArray, "
+            f"but got {solver.modes_std} instead."
+        )
+        assert isinstance(solver.eigs_std, np.ndarray), (
+            "Expected 'eigs_std' to be np.ndarray, "
+            f"but got {solver.eigs_std} instead."
+        )
+        assert isinstance(solver.amplitudes_std, np.ndarray), (
+            "Expected 'amplitudes_std' to be np.ndarray, "
+            f"but got {solver.amplitudes_std} instead."
+        )
 
 
 @pytest.mark.parametrize("forecast_span", ["10 s", 10])
@@ -147,6 +164,6 @@ def test_forecast():
 
 def test_forecast_outputs():
     assert isinstance(optdmd.time_forecast, np.ndarray), (
-        "Expected 'optdmd.time_forecast' to be of type 'np.ndarray', "
+        "Expected 'time_forecast' to be of type 'np.ndarray', "
         f"but got {type(optdmd.time_forecast)} instead."
     )
