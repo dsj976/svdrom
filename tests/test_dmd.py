@@ -153,17 +153,31 @@ def test_generate_forecast_time_vector(forecast_span, dt):
     )
 
 
-def test_forecast():
+@pytest.mark.parametrize("solver", [optdmd, optdmd_bagging])
+def test_forecast(solver):
     """Test for the forecast() method."""
-    forecast = optdmd.forecast(forecast_span="10 s", dt="1 s")
-    assert isinstance(forecast, xr.DataArray), (
-        "Expected 'forecast' to be of type 'xr.DataArray', "
-        f"but got {type(forecast)} instead."
-    )
+    if solver.num_trials == 0:
+        forecast = solver.forecast(forecast_span="10 s", dt="1 s")
+        assert isinstance(forecast, xr.DataArray), (
+            "Expected 'forecast' to be of type 'xr.DataArray', "
+            f"but got {type(forecast)} instead."
+        )
+    else:
+        forecast, forecast_var = solver.forecast(forecast_span="10 s", dt="1 s")
+        assert isinstance(forecast, xr.DataArray), (
+            "Expected 'forecast' to be of type 'xr.DataArray', "
+            f"but got {type(forecast)} instead."
+        )
+        assert isinstance(forecast_var, xr.DataArray), (
+            "Expected 'forecast_var' to be of type 'xr.DataArray', "
+            f"but got {type(forecast)} instead."
+        )
 
 
-def test_forecast_outputs():
-    assert isinstance(optdmd.time_forecast, np.ndarray), (
+@pytest.mark.parametrize("solver", [optdmd, optdmd_bagging])
+def test_forecast_outputs(solver):
+    """Test the instance attributes after having called the forecast() method."""
+    assert isinstance(solver.time_forecast, np.ndarray), (
         "Expected 'time_forecast' to be of type 'np.ndarray', "
-        f"but got {type(optdmd.time_forecast)} instead."
+        f"but got {type(solver.time_forecast)} instead."
     )
