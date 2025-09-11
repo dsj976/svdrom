@@ -35,12 +35,6 @@ def test_basic(solver):
     assert hasattr(
         solver, "time_forecast"
     ), "OptDMD object is missing the 'time_forecast' attribute."
-    assert hasattr(
-        solver, "forecast_result"
-    ), "OptDMD object is missing the 'forecast_result' attribute."
-    assert hasattr(
-        solver, "forecast_var"
-    ), "OptDMD object is missing the 'forecast_var' attribute."
 
 
 @pytest.mark.parametrize("solver", [optdmd, optdmd_bagging])

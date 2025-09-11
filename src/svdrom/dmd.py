@@ -87,8 +87,6 @@ class OptDMD:
         self._t_fit: np.ndarray | None = None  # internal use only
         self._time_forecast: np.ndarray | None = None
         self._t_forecast: np.ndarray | None = None  # internal use only
-        self._forecast: xr.DataArray | None = None
-        self._forecast_var: xr.DataArray | None = None
 
     @property
     def n_modes(self) -> int:
@@ -163,16 +161,6 @@ class OptDMD:
     def time_forecast(self) -> np.ndarray | None:
         """The time vector for the DMD forecast (read-only)."""
         return self._time_forecast
-
-    @property
-    def forecast_result(self) -> xr.DataArray | None:
-        """The DMD forecast (read-only)."""
-        return self._forecast
-
-    @property
-    def forecast_var(self) -> xr.DataArray | None:
-        """The variance of the DMD forecast (read-only)."""
-        return self._forecast_var
 
     def _check_svd_inputs(self, u: xr.DataArray, s: np.ndarray, v: xr.DataArray):
         """Check that the passed SVD results are valid."""
@@ -389,17 +377,14 @@ class OptDMD:
         coords = {k: v for k, v in self._modes.coords.items() if k != "components"}
         coords[self._time_dimension] = self._time_forecast
         if isinstance(forecast, np.ndarray):
-            self._forecast = xr.DataArray(
-                forecast, dims=dims, coords=coords, name="dmd_forecast"
-            )
-            return self._forecast
-        self._forecast = xr.DataArray(
+            return xr.DataArray(forecast, dims=dims, coords=coords, name="dmd_forecast")
+        forecast_mean = xr.DataArray(
             forecast[0], dims=dims, coords=coords, name="dmd_forecast_mean"
         )
-        self._forecast_var = xr.DataArray(
+        forecast_var = xr.DataArray(
             forecast[1], dims=dims, coords=coords, name="dmd_forecast_var"
         )
-        return self._forecast, self._forecast_var
+        return forecast_mean, forecast_var
 
     def forecast(
         self, forecast_span: str | int, dt: str | int | None
