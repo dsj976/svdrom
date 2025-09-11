@@ -1,5 +1,6 @@
 from typing import Literal
 
+import dask.array as da
 import numpy as np
 import xarray as xr
 from pydmd import BOPDMD
@@ -386,31 +387,149 @@ class OptDMD:
         )
         return forecast_mean, forecast_var
 
+    def _forecast(
+        self, t: np.ndarray, memory_limit_bytes: float
+    ) -> (
+        np.ndarray
+        | da.Array
+        | tuple[np.ndarray, np.ndarray]
+        | tuple[da.Array, da.Array]
+    ):
+        """Given an input time vector and the fitted DMD model, compute
+        a forecast. If bagging has been used, Monte-Carlo uncertainty
+        propagation is employed to produce multiple forecast realizations and
+        a tuple consisting of the mean forecast and the forecast variance is returned.
+        If the estimated forecast size is beyond memory_limit_bytes, Dask is used to
+        produce the forecast. Otherwise, NumPy is used.
+        """
+        if self._modes is None or self._eigs is None or self._amplitudes is None:
+            msg = "The DMD model has not been fitted."
+            raise RuntimeError(msg)
+        output_shape = (self._modes.shape[0], len(t))
+        dtype = np.result_type(
+            self._modes, self._amplitudes, np.exp(np.outer(self._eigs, t))
+        )
+        estimated_size = np.prod(output_shape) * np.dtype(dtype).itemsize
+
+        def draw_from_rand_distr() -> tuple[np.ndarray, np.ndarray]:
+            """Draw eigenvalues and amplitudes from a normal distribution."""
+            if not isinstance(self._eigs, np.ndarray) or not isinstance(
+                self._amplitudes, np.ndarray
+            ):
+                msg = "The DMD model has not been fitted."
+                raise RuntimeError(msg)
+            if not isinstance(self._eigs_std, np.ndarray) or not isinstance(
+                self._amplitudes_std, np.ndarray
+            ):
+                msg = "The DMD bagging statistics have not been computed."
+                raise RuntimeError(msg)
+            eigs = self._eigs + np.multiply(
+                np.random.randn(*self._eigs.shape),
+                self._eigs_std,
+            )
+            amps = self._amplitudes + np.multiply(
+                np.random.randn(*self._amplitudes.shape),
+                self._amplitudes_std,
+            )
+            return eigs, amps
+
+        forecasts = []
+        if estimated_size > memory_limit_bytes:
+            # use Dask to compute forecast
+            chunk_size = min(100_000, self._modes.shape[0])
+            modes_da = da.from_array(
+                self._modes, chunks=(chunk_size, self._modes.shape[1])
+            )
+
+            if self._eigs_std is not None and self._amplitudes_std is not None:
+                # when bagging has been used, use Monte-Carlo uncertainty propagation
+                # to produce multiple forecast realizations
+                for _ in range(self._num_trials):
+                    # draw eigenvalues and amplitudes from random distribution
+                    eigs, amps = draw_from_rand_distr()
+                    amps_da = da.from_array(
+                        np.diag(amps),
+                        chunks=(self._modes.shape[1], self._modes.shape[1]),
+                    )
+                    exp_da = da.from_array(
+                        np.exp(np.outer(eigs, t)), chunks=(self._modes.shape[1], len(t))
+                    )
+                    # compute a forecast realization
+                    forecast_da = da.dot(modes_da, da.dot(amps_da, exp_da))
+                    forecasts.append(forecast_da)
+
+                # stack forecasts along new axis and compute mean and variance
+                forecasts_da = da.stack(forecasts, axis=0)
+                return forecasts_da.mean(axis=0), forecasts_da.var(axis=0)
+
+            amps_da = da.from_array(
+                np.diag(self._amplitudes),
+                chunks=(self._modes.shape[1], self._modes.shape[1]),
+            )
+            exp_da = da.from_array(
+                np.exp(np.outer(self._eigs, t)), chunks=(self._modes.shape[1], len(t))
+            )
+            return da.dot(modes_da, da.dot(amps_da, exp_da))
+
+        # use NumPy to compute the forecast
+        if self._eigs_std is not None and self._amplitudes_std is not None:
+            # if bagging has been used, use Monte-Carlo uncertainty propagation
+            # to produce multiple forecast realizations
+            for _ in range(self._num_trials):
+                eigs, amps = draw_from_rand_distr()
+                forecast = np.linalg.multi_dot(
+                    [self._modes, np.diag(amps), np.exp(np.outer(eigs, t))]
+                )
+                forecasts.append(forecast)
+
+            forecasts_np = np.stack(forecasts, axis=0)
+            return forecasts_np.mean(axis=0), forecasts_np.var(axis=0)
+
+        return np.linalg.multi_dot(
+            [
+                self._modes,
+                np.diag(self._amplitudes),
+                np.exp(np.outer(self._eigs, t)),
+            ]
+        )
+
     def forecast(
-        self, forecast_span: str | int, dt: str | int | None
+        self,
+        forecast_span: str | int,
+        dt: str | int | None,
     ) -> xr.DataArray | tuple[xr.DataArray, xr.DataArray]:
         """
-        Generates a forecast using the fitted OptDMD model over a specified time span.
-        The model must be fitted before calling this method.
+        Generates a forecast using the fitted OptDMD model over a specified
+        time span. The model must be fitted before calling this method.
 
         Parameters
         ----------
         forecast_span: str | int
             The total time span for the forecast. If int, interpreted as time
-            in the model's time units. If str, should be in the format "value units",
-            e.g. "30 D" for 30 days.
+            in the model's time units. If str, should be in the format
+            "value units", e.g. "30 D" for 30 days.
         dt: str | int | None, optional
-            The time step or number of time points for the forecast. If str, should be
-            in the format "value units", e.g. "1 h" for 1 hour. If int, interpreted as
-            number of forecast points. If None, uses the average time step of the
-            training data on which the DMD model was fitted.
+            The time step or number of time points for the forecast. If str,
+            should be in the format "value units", e.g. "1 h" for 1 hour.
+            If int, interpreted as number of forecast points. If None, uses
+            the average time step of the training data on which the DMD model
+            was fitted.
+        memory_limit_bytes: float
+            The memory threshold that decides whether to compute the forecast
+            using NumPy or Dask. If the estimated array size is below
+            memory_limit_bytes, NumPy is used and the forecast is returned as
+            a NumPy-backed Xarray. If the estimated array size is above
+            memory_limit_bytes, Dask is used and the forecast is returned as
+            a Dask-backed Xarray.
 
         Returns
         -------
         xarray.DataArray | tuple[xarray.DataArray, xarray.DataArray]
-            The forecasted data as an xarray.DataArray. If bagging is used, two
-            xarray.DataArray are returned where the first one is the ensemble mean
-            and the second one is the ensemble variance.
+            The forecasted data as an xarray.DataArray. If bagging is used,
+            two xarray.DataArray are returned where the first one is the
+            ensemble mean and the second one is the ensemble variance. The
+            Xarrays are NumPy-backed or Dask-backed depending on the
+            'memory_limit_bytes' parameter.
         """
         if self._solver is None:
             msg = "The OptDMD model must be fitted before forecasting."
