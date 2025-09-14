@@ -362,7 +362,11 @@ class OptDMD:
         return self
 
     def _forecast_to_dataarray(
-        self, forecast: np.ndarray | tuple[np.ndarray, np.ndarray]
+        self,
+        forecast: np.ndarray
+        | da.Array
+        | tuple[da.Array, da.Array]
+        | tuple[np.ndarray, np.ndarray],
     ) -> xr.DataArray | tuple[xr.DataArray, xr.DataArray]:
         """Given a single numpy.ndarray consisting of a single DMD forecast,
         or a tuple of two numpy.ndarray where the first one corresponds to
@@ -388,7 +392,7 @@ class OptDMD:
         return forecast_mean, forecast_var
 
     def _forecast(
-        self, t: np.ndarray, memory_limit_bytes: float
+        self, t: np.ndarray, use_dask: bool = False
     ) -> (
         np.ndarray
         | da.Array
@@ -399,20 +403,17 @@ class OptDMD:
         a forecast. If bagging has been used, Monte-Carlo uncertainty
         propagation is employed to produce multiple forecast realizations and
         a tuple consisting of the mean forecast and the forecast variance is returned.
-        If the estimated forecast size is beyond memory_limit_bytes, Dask is used to
-        produce the forecast. Otherwise, NumPy is used.
+        Set the flag `use_dask=True` to compute the forecast as a Dask array. Otherwise
+        the forecast is computed as a NumPy array.
         """
         if self._modes is None or self._eigs is None or self._amplitudes is None:
-            msg = "The DMD model has not been fitted."
+            msg = "Results of the OptDMD fit are not available."
             raise RuntimeError(msg)
-        output_shape = (self._modes.shape[0], len(t))
-        dtype = np.result_type(
-            self._modes, self._amplitudes, np.exp(np.outer(self._eigs, t))
-        )
-        estimated_size = np.prod(output_shape) * np.dtype(dtype).itemsize
 
         def draw_from_rand_distr() -> tuple[np.ndarray, np.ndarray]:
-            """Draw eigenvalues and amplitudes from a normal distribution."""
+            """Draw eigenvalues and amplitudes from a normal distribution
+            scaled by the computed standard deviation.
+            """
             if not isinstance(self._eigs, np.ndarray) or not isinstance(
                 self._amplitudes, np.ndarray
             ):
@@ -434,8 +435,7 @@ class OptDMD:
             return eigs, amps
 
         forecasts = []
-        if estimated_size > memory_limit_bytes:
-            # use Dask to compute forecast
+        if use_dask:
             chunk_size = min(100_000, self._modes.shape[0])
             modes_da = da.from_array(
                 self._modes, chunks=(chunk_size, self._modes.shape[1])
@@ -497,6 +497,7 @@ class OptDMD:
         self,
         forecast_span: str | int,
         dt: str | int | None,
+        memory_limit_bytes: float = 1e9,
     ) -> xr.DataArray | tuple[xr.DataArray, xr.DataArray]:
         """
         Generates a forecast using the fitted OptDMD model over a specified
@@ -535,39 +536,45 @@ class OptDMD:
             msg = "The OptDMD model must be fitted before forecasting."
             logger.exception(msg)
             raise RuntimeError(msg)
+        if self._modes is None or self._eigs is None or self._amplitudes is None:
+            msg = "Results of the OptDMD fit are not available."
+            raise RuntimeError(msg)
         try:
             t_forecast = self._generate_forecast_time_vector(forecast_span, dt)
         except Exception as e:
             msg = "Error trying to generate the forecast time vector."
             logger.exception(msg)
             raise RuntimeError(msg) from e
+
+        # estimate the size of the forecast array
+        forecast_shape = (self._modes.shape[0], len(t_forecast))
+        dtype = np.result_type(
+            self._modes,
+            self._amplitudes,
+            np.exp(np.outer(self._eigs, t_forecast.astype("float64"))),
+        )
+        estimated_size = np.prod(forecast_shape) * np.dtype(dtype).itemsize
+
+        msg = f"Estimated forecast size is {estimated_size/1e3:.3f} KB."
+        logger.info(msg)
+        if estimated_size > memory_limit_bytes:
+            logger.info("Will use Dask to compute the forecast.")
+            use_dask = True
+        else:
+            logger.info("Will not use Dask to compute the forecast.")
+            use_dask = False
+
         logger.info("Computing the DMD forecast...")
         try:
-            forecast = self._solver.forecast(t_forecast.astype("float64"))
-            if self.num_trials == 0:
-                assert isinstance(forecast, np.ndarray), (
-                    "Without bagging, expected the forecast to return "
-                    "a single numpy.ndarray."
-                )
-            else:
-                assert isinstance(forecast, tuple), (
-                    "With bagging, expected the forecast to return "
-                    "two numpy.ndarray."
-                )
-                assert len(forecast) == 2, (
-                    "With bagging, expected the forecast to return "
-                    "two numpy.ndarray."
-                )
+            forecast = self._forecast(t_forecast.astype("float64"), use_dask)
         except Exception as e:
             msg = "Error computing the DMD forecast."
             logger.exception(msg)
             raise RuntimeError(msg) from e
         logger.info("Done.")
         try:
-            forecast = self._forecast_to_dataarray(forecast)
+            return self._forecast_to_dataarray(forecast)
         except Exception as e:
             msg = "Error trying to convert forecast into xarray.DataArray."
             logger.exception(msg)
             raise RuntimeError(msg) from e
-
-        return forecast
