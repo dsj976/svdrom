@@ -65,6 +65,20 @@ def test_fit_outputs(solver):
         "Expected 'time_fit' to be of type 'np.ndarray', "
         f"but got {type(solver.time_fit)} instead."
     )
+    np.testing.assert_equal(
+        solver.time_fit,
+        generator.v.time.values,
+        strict=True,
+        err_msg="Expected 'time_fit' vector to equal 'v.time.values'.",
+    )
+    assert isinstance(solver._t_fit, np.ndarray), (
+        "Expected 't_fit' to be of type 'np.ndarray', "
+        f"but got {type(solver._t_fit)} instead."
+    )
+    assert solver._t_fit.dtype.name == f"timedelta64[{solver._time_units}]", (
+        f"Expected 't_fit' vector to have data type timedelta64[{solver._time_units}], "
+        f"but got {solver._t_fit.dtype.name}."
+    )
     assert solver.modes.shape == generator.u.shape, (
         f"Expected 'modes.shape' to be {generator.u.shape}, "
         f"but got {solver.modes.shape} instead."
