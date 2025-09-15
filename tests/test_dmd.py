@@ -32,9 +32,6 @@ def test_basic(solver):
     assert hasattr(
         solver, "time_fit"
     ), "OptDMD object is missing the 'time_fit' attribute."
-    assert hasattr(
-        solver, "time_forecast"
-    ), "OptDMD object is missing the 'time_forecast' attribute."
 
 
 @pytest.mark.parametrize("solver", [optdmd, optdmd_bagging])
@@ -110,40 +107,40 @@ def test_fit_outputs(solver):
 @pytest.mark.parametrize("dt", ["1 s", 10, None])
 def test_generate_forecast_time_vector(forecast_span, dt):
     """Test the method to generate the forecast time vector."""
-    t_forecast = optdmd._generate_forecast_time_vector(forecast_span, dt)
+    t_forecast, time_forecast = optdmd._generate_forecast_time_vector(forecast_span, dt)
     assert isinstance(t_forecast, np.ndarray), (
         "Expected 't_forecast' to be of type 'np.ndarray', "
         f"but got {type(t_forecast)} instead."
     )
-    assert isinstance(optdmd.time_forecast, np.ndarray), (
+    assert isinstance(time_forecast, np.ndarray), (
         "Expected 'time_forecast' to be of type 'np.ndarray', "
-        f"but got {type(optdmd.time_forecast)} instead."
+        f"but got {type(time_forecast)} instead."
     )
     assert np.unique(np.diff(t_forecast)) == np.timedelta64(1, "s"), (
         "Expected the time difference between consecutive elements in "
         "'t_forecast' to be one second, but got "
         f"{np.unique(np.diff(t_forecast))} instead."
     )
-    assert np.unique(np.diff(optdmd.time_forecast)) == np.timedelta64(1, "s"), (
+    assert np.unique(np.diff(time_forecast)) == np.timedelta64(1, "s"), (
         "Expected the time difference between consecutive elements in "
         "'time_forecast' to be one second, but got "
-        f"{np.unique(np.diff(optdmd.time_forecast))} instead."
+        f"{np.unique(np.diff(time_forecast))} instead."
     )
     assert len(t_forecast) == 10, (
         "Expected the length of 't_forecast' to be 10, but got "
         f"{len(t_forecast)} instead."
     )
-    assert len(optdmd.time_forecast) == 10, (
+    assert len(time_forecast) == 10, (
         "Expected the length of 'time_forecast' to be 10, but got "
-        f"{len(optdmd.time_forecast)} instead."
+        f"{len(time_forecast)} instead."
     )
     assert t_forecast[0] == optdmd._t_fit[-1] + np.timedelta64(1, "s"), (
         "Expected 't_forecast[0]' to be one second ahead"
         f"of t_fit[-1], but got {t_forecast[0] - optdmd._t_fit[-1]} instead."
     )
-    assert optdmd.time_forecast[0] == optdmd.time_fit[-1] + np.timedelta64(1, "s"), (
+    assert time_forecast[0] == optdmd.time_fit[-1] + np.timedelta64(1, "s"), (
         "Expected 'time_forecast[0]' to be one second ahead of time_fit[-1], "
-        f"but got {optdmd.time_forecast[0] - optdmd.time_fit[-1]} instead."
+        f"but got {time_forecast[0] - optdmd.time_fit[-1]} instead."
     )
 
 
@@ -166,12 +163,3 @@ def test_forecast(solver):
             "Expected 'forecast_var' to be of type 'xr.DataArray', "
             f"but got {type(forecast)} instead."
         )
-
-
-@pytest.mark.parametrize("solver", [optdmd, optdmd_bagging])
-def test_forecast_outputs(solver):
-    """Test the instance attributes after having called the forecast() method."""
-    assert isinstance(solver.time_forecast, np.ndarray), (
-        "Expected 'time_forecast' to be of type 'np.ndarray', "
-        f"but got {type(solver.time_forecast)} instead."
-    )

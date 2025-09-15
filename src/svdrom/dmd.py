@@ -86,8 +86,6 @@ class OptDMD:
         self._solver: BOPDMD | None = None
         self._time_fit: np.ndarray | None = None
         self._t_fit: np.ndarray | None = None  # internal use only
-        self._time_forecast: np.ndarray | None = None
-        self._t_forecast: np.ndarray | None = None  # internal use only
 
     @property
     def n_modes(self) -> int:
@@ -158,11 +156,6 @@ class OptDMD:
         """The time vector for the DMD fit (read-only)."""
         return self._time_fit
 
-    @property
-    def time_forecast(self) -> np.ndarray | None:
-        """The time vector for the DMD forecast (read-only)."""
-        return self._time_forecast
-
     def _check_svd_inputs(self, u: xr.DataArray, s: np.ndarray, v: xr.DataArray):
         """Check that the passed SVD results are valid."""
         if not isinstance(u.data, np.ndarray):
@@ -196,7 +189,9 @@ class OptDMD:
             logger.exception(msg)
             raise ValueError(msg)
 
-    def _generate_fit_time_vector(self, v: xr.DataArray) -> np.ndarray:
+    def _generate_fit_time_vector(
+        self, v: xr.DataArray
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Given the right singular vectors containing the temporal
         information, generate the time vector for the DMD fit.
         """
@@ -208,11 +203,11 @@ class OptDMD:
         self._t_fit = np.concat(
             (start_time, time_vector)
         )  # vector to be fed to the `fit()` call
-        return self._t_fit
+        return self._t_fit, self._time_fit
 
     def _generate_forecast_time_vector(
         self, forecast_span: str | int, dt: str | int | None = None
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Given a forecast time span and time step, generate the time vector
         for the DMD forecast.
 
@@ -227,6 +222,13 @@ class OptDMD:
             the format "value units", e.g. "1 h" for 1 hour. If int, interpreted as
             number of forecast points. If None, uses the average time step of the
             training data.
+
+        Returns
+        -------
+        t_forecast: np.ndarray
+            The time vector to be fed to the `forecast()` call.
+        time_forecast: np.ndarray
+            The time vector representing the true time of the forecast.
         """
         if self._t_fit is None or self._time_fit is None:
             msg = "The DMD fit time vector is not initialized."
@@ -275,7 +277,7 @@ class OptDMD:
         # generate the time vector representing true time of the forecast
         forecast_start = self._time_fit[-1]
         forecast_end = forecast_start + span
-        self._time_forecast = np.arange(
+        time_forecast = np.arange(
             forecast_start + time_step,
             forecast_end + time_step,
             time_step,
@@ -284,13 +286,13 @@ class OptDMD:
         # generate the time vector to be fed to the `forecast()` call
         forecast_start = self._t_fit[-1]
         forecast_end = forecast_start + span
-        self._t_forecast = np.arange(
+        t_forecast = np.arange(
             forecast_start + time_step,
             forecast_end + time_step,
             time_step,
         )
 
-        return self._t_forecast
+        return t_forecast, time_forecast
 
     def _extract_results(self, bopdmd: BOPDMD, u: xr.DataArray) -> None:
         """Given the fitted BOPDMD instance and the left singular vectors
@@ -344,7 +346,7 @@ class OptDMD:
             trial_size=self._trial_size,
             **kwargs,
         )
-        t_fit = self._generate_fit_time_vector(v)
+        t_fit, _ = self._generate_fit_time_vector(v)
         logger.info("Computing the DMD fit...")
         try:
             bopdmd.fit_econ(
@@ -367,12 +369,14 @@ class OptDMD:
         | da.Array
         | tuple[da.Array, da.Array]
         | tuple[np.ndarray, np.ndarray],
+        time_forecast: np.ndarray,
     ) -> xr.DataArray | tuple[xr.DataArray, xr.DataArray]:
-        """Given a single numpy.ndarray consisting of a single DMD forecast,
-        or a tuple of two numpy.ndarray where the first one corresponds to
-        the ensemble mean forecast and the second one corresponds to the
-        ensemble variance, convert the input into xarray.DataArray with the
-        corresponding format.
+        """Convert the DMD forecast into formatted xarray.DataArray(s).
+        The forecast may be a single array (corresponding to a single
+        deterministic forecast) or a tuple of two arrays (where the first
+        one is the ensemble mean and the second one is the ensemble variance).
+        The second argument is the time vector representing the true forecast
+        time.
         """
         if self._modes is None:
             msg = "The DMD modes have not been computed."
@@ -380,7 +384,7 @@ class OptDMD:
 
         dims = (self._modes.dims[0], self._time_dimension)
         coords = {k: v for k, v in self._modes.coords.items() if k != "components"}
-        coords[self._time_dimension] = self._time_forecast
+        coords[self._time_dimension] = time_forecast
         if isinstance(forecast, np.ndarray):
             return xr.DataArray(forecast, dims=dims, coords=coords, name="dmd_forecast")
         forecast_mean = xr.DataArray(
@@ -392,14 +396,14 @@ class OptDMD:
         return forecast_mean, forecast_var
 
     def _forecast(
-        self, t: np.ndarray, use_dask: bool = False
+        self, t_forecast: np.ndarray, use_dask: bool = False
     ) -> (
         np.ndarray
         | da.Array
         | tuple[np.ndarray, np.ndarray]
         | tuple[da.Array, da.Array]
     ):
-        """Given an input time vector and the fitted DMD model, compute
+        """Given a forecast time vector and the fitted DMD model, compute
         a forecast. If bagging has been used, Monte-Carlo uncertainty
         propagation is employed to produce multiple forecast realizations and
         a tuple consisting of the mean forecast and the forecast variance is returned.
@@ -452,7 +456,8 @@ class OptDMD:
                         chunks=(self._modes.shape[1], self._modes.shape[1]),
                     )
                     exp_da = da.from_array(
-                        np.exp(np.outer(eigs, t)), chunks=(self._modes.shape[1], len(t))
+                        np.exp(np.outer(eigs, t_forecast)),
+                        chunks=(self._modes.shape[1], len(t_forecast)),
                     )
                     # compute a forecast realization
                     forecast_da = da.dot(modes_da, da.dot(amps_da, exp_da))
@@ -467,7 +472,8 @@ class OptDMD:
                 chunks=(self._modes.shape[1], self._modes.shape[1]),
             )
             exp_da = da.from_array(
-                np.exp(np.outer(self._eigs, t)), chunks=(self._modes.shape[1], len(t))
+                np.exp(np.outer(self._eigs, t_forecast)),
+                chunks=(self._modes.shape[1], len(t_forecast)),
             )
             return da.dot(modes_da, da.dot(amps_da, exp_da))
 
@@ -478,7 +484,7 @@ class OptDMD:
             for _ in range(self._num_trials):
                 eigs, amps = draw_from_rand_distr()
                 forecast = np.linalg.multi_dot(
-                    [self._modes, np.diag(amps), np.exp(np.outer(eigs, t))]
+                    [self._modes, np.diag(amps), np.exp(np.outer(eigs, t_forecast))]
                 )
                 forecasts.append(forecast)
 
@@ -489,7 +495,7 @@ class OptDMD:
             [
                 self._modes,
                 np.diag(self._amplitudes),
-                np.exp(np.outer(self._eigs, t)),
+                np.exp(np.outer(self._eigs, t_forecast)),
             ]
         )
 
@@ -540,7 +546,9 @@ class OptDMD:
             msg = "Results of the OptDMD fit are not available."
             raise RuntimeError(msg)
         try:
-            t_forecast = self._generate_forecast_time_vector(forecast_span, dt)
+            t_forecast, time_forecast = self._generate_forecast_time_vector(
+                forecast_span, dt
+            )
         except Exception as e:
             msg = "Error trying to generate the forecast time vector."
             logger.exception(msg)
@@ -573,7 +581,7 @@ class OptDMD:
             raise RuntimeError(msg) from e
         logger.info("Done.")
         try:
-            return self._forecast_to_dataarray(forecast)
+            return self._forecast_to_dataarray(forecast, time_forecast)
         except Exception as e:
             msg = "Error trying to convert forecast into xarray.DataArray."
             logger.exception(msg)
