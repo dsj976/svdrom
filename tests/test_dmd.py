@@ -68,7 +68,7 @@ def test_fit_outputs(solver):
         "Expected 'time_fit' to be of type 'np.ndarray', "
         f"but got {type(solver.time_fit)} instead."
     )
-    assert optdmd.modes.shape == generator.u.shape, (
+    assert solver.modes.shape == generator.u.shape, (
         f"Expected 'modes.shape' to be {generator.u.shape}, "
         f"but got {solver.modes.shape} instead."
     )
