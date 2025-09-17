@@ -161,11 +161,21 @@ def test_generate_forecast_time_vector(forecast_span, dt):
 @pytest.mark.parametrize("solver", [optdmd, optdmd_bagging])
 def test_forecast(solver):
     """Test for the forecast() method."""
+    expected_forecast_shape = (generator.u.shape[0], 10)
+    expected_forecast_dims = (generator.u.dims[0], solver.time_dimension)
     if solver.num_trials == 0:
         forecast = solver.forecast(forecast_span="10 s", dt="1 s")
         assert isinstance(forecast, xr.DataArray), (
             "Expected 'forecast' to be of type 'xr.DataArray', "
             f"but got {type(forecast)} instead."
+        )
+        assert forecast.dims == expected_forecast_dims, (
+            f"Expected 'forecast' to have dimensions {expected_forecast_dims}, "
+            f"but got {forecast.dims} instead."
+        )
+        assert forecast.shape == expected_forecast_shape, (
+            f"Expected 'forecast' to have shape {expected_forecast_shape}, "
+            f"but got {forecast.shape}."
         )
     else:
         forecast, forecast_var = solver.forecast(forecast_span="10 s", dt="1 s")
@@ -173,7 +183,23 @@ def test_forecast(solver):
             "Expected 'forecast' to be of type 'xr.DataArray', "
             f"but got {type(forecast)} instead."
         )
+        assert forecast.dims == expected_forecast_dims, (
+            f"Expected 'forecast' to have dimensions {expected_forecast_dims}, "
+            f"but got {forecast.dims} instead."
+        )
+        assert forecast.shape == expected_forecast_shape, (
+            f"Expected 'forecast' to have shape {expected_forecast_shape}, "
+            f"but got {forecast.shape}."
+        )
         assert isinstance(forecast_var, xr.DataArray), (
             "Expected 'forecast_var' to be of type 'xr.DataArray', "
             f"but got {type(forecast)} instead."
+        )
+        assert forecast_var.dims == expected_forecast_dims, (
+            f"Expected 'forecast_var' to have dimensions {expected_forecast_dims}, "
+            f"but got {forecast.dims} instead."
+        )
+        assert forecast_var.shape == expected_forecast_shape, (
+            f"Expected 'forecast_var' to have shape {expected_forecast_shape}, "
+            f"but got {forecast.shape}."
         )
