@@ -395,21 +395,20 @@ class OptDMD:
         )
         return forecast_mean, forecast_var
 
-    def _forecast(
-        self, t_forecast: np.ndarray, use_dask: bool = False
+    def _predict(
+        self, t: np.ndarray, use_dask: bool = False
     ) -> (
         np.ndarray
         | da.Array
         | tuple[np.ndarray, np.ndarray]
         | tuple[da.Array, da.Array]
     ):
-        """Given a forecast time vector and the fitted DMD model, compute
-        a forecast. If bagging has been used, Monte-Carlo uncertainty
-        propagation is employed to produce multiple forecast realizations and
-        a tuple consisting of the mean forecast and the forecast variance is returned.
-        Set the flag `use_dask=True` to compute the forecast as a Dask array. Otherwise
-        the forecast is computed as a NumPy array.
-        """
+        """Given a time vector and the fitted DMD model, compute a forecast or a
+        reconstruction (i.e. a prediction). If bagging has been used, Monte-Carlo
+        uncertainty propagation is employed to produce multiple prediction realizations
+        and a tuple consisting of the mean prediction and the prediction variance
+        is returned. Set the flag `use_dask=True` to compute the prediction as a
+        Dask array. Otherwise the prediction is computed as a NumPy array."""
         if self._modes is None or self._eigs is None or self._amplitudes is None:
             msg = "Results of the OptDMD fit are not available."
             raise RuntimeError(msg)
@@ -438,7 +437,7 @@ class OptDMD:
             )
             return eigs, amps
 
-        forecasts = []
+        predictions = []
         if use_dask:
             chunk_size = min(100_000, self._modes.shape[0])
             modes_da = da.from_array(
@@ -447,7 +446,7 @@ class OptDMD:
 
             if self._eigs_std is not None and self._amplitudes_std is not None:
                 # when bagging has been used, use Monte-Carlo uncertainty propagation
-                # to produce multiple forecast realizations
+                # to produce multiple prediction realizations
                 for _ in range(self._num_trials):
                     # draw eigenvalues and amplitudes from random distribution
                     eigs, amps = draw_from_rand_distr()
@@ -456,46 +455,46 @@ class OptDMD:
                         chunks=(self._modes.shape[1], self._modes.shape[1]),
                     )
                     exp_da = da.from_array(
-                        np.exp(np.outer(eigs, t_forecast)),
-                        chunks=(self._modes.shape[1], len(t_forecast)),
+                        np.exp(np.outer(eigs, t)),
+                        chunks=(self._modes.shape[1], len(t)),
                     )
-                    # compute a forecast realization
-                    forecast_da = da.dot(modes_da, da.dot(amps_da, exp_da))
-                    forecasts.append(forecast_da)
+                    # compute a prediction realization
+                    prediction_da = da.dot(modes_da, da.dot(amps_da, exp_da))
+                    predictions.append(prediction_da)
 
-                # stack forecasts along new axis and compute mean and variance
-                forecasts_da = da.stack(forecasts, axis=0)
-                return forecasts_da.mean(axis=0), forecasts_da.var(axis=0)
+                # stack predictions along new axis and compute mean and variance
+                predictions_da = da.stack(predictions, axis=0)
+                return predictions_da.mean(axis=0), predictions_da.var(axis=0)
 
             amps_da = da.from_array(
                 np.diag(self._amplitudes),
                 chunks=(self._modes.shape[1], self._modes.shape[1]),
             )
             exp_da = da.from_array(
-                np.exp(np.outer(self._eigs, t_forecast)),
-                chunks=(self._modes.shape[1], len(t_forecast)),
+                np.exp(np.outer(self._eigs, t)),
+                chunks=(self._modes.shape[1], len(t)),
             )
             return da.dot(modes_da, da.dot(amps_da, exp_da))
 
-        # use NumPy to compute the forecast
+        # use NumPy to compute the prediction
         if self._eigs_std is not None and self._amplitudes_std is not None:
             # if bagging has been used, use Monte-Carlo uncertainty propagation
-            # to produce multiple forecast realizations
+            # to produce multiple prediction realizations
             for _ in range(self._num_trials):
                 eigs, amps = draw_from_rand_distr()
                 forecast = np.linalg.multi_dot(
-                    [self._modes, np.diag(amps), np.exp(np.outer(eigs, t_forecast))]
+                    [self._modes, np.diag(amps), np.exp(np.outer(eigs, t))]
                 )
-                forecasts.append(forecast)
+                predictions.append(forecast)
 
-            forecasts_np = np.stack(forecasts, axis=0)
-            return forecasts_np.mean(axis=0), forecasts_np.var(axis=0)
+            predictions_np = np.stack(predictions, axis=0)
+            return predictions_np.mean(axis=0), predictions_np.var(axis=0)
 
         return np.linalg.multi_dot(
             [
                 self._modes,
                 np.diag(self._amplitudes),
-                np.exp(np.outer(self._eigs, t_forecast)),
+                np.exp(np.outer(self._eigs, t)),
             ]
         )
 
@@ -574,7 +573,7 @@ class OptDMD:
 
         logger.info("Computing the DMD forecast...")
         try:
-            forecast = self._forecast(t_forecast.astype("float64"), use_dask)
+            forecast = self._predict(t_forecast.astype("float64"), use_dask)
         except Exception as e:
             msg = "Error computing the DMD forecast."
             logger.exception(msg)
