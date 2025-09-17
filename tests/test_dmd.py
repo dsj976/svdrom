@@ -1,3 +1,5 @@
+import dask
+import dask.array as da
 import numpy as np
 import pytest
 import xarray as xr
@@ -10,6 +12,9 @@ generator.generate_svd_results(n_components=10)
 
 optdmd = OptDMD()
 optdmd_bagging = OptDMD(num_trials=5)
+
+# set the dask scheduler to single-threaded
+dask.config.set(scheduler="single-threaded")
 
 
 @pytest.mark.parametrize("solver", [optdmd, optdmd_bagging])
@@ -156,6 +161,95 @@ def test_generate_forecast_time_vector(forecast_span, dt):
         "Expected 'time_forecast[0]' to be one second ahead of time_fit[-1], "
         f"but got {time_forecast[0] - optdmd.time_fit[-1]} instead."
     )
+
+
+@pytest.mark.parametrize("solver", [optdmd, optdmd_bagging])
+def test_predict(solver):
+    """Test for the private predict() method, ensuring it returns the
+    same output as BOPDMD.forecast() from PyDMD.
+    """
+    t, _ = solver._generate_forecast_time_vector(
+        forecast_span="10 s",
+        dt="1 s",
+    )
+    t = t.astype("float64")
+    if solver.num_trials == 0:
+        # without bagging
+
+        # no Dask
+        forecast_np = solver._predict(t, use_dask=False)
+        forecast_np_pydmd = solver.solver.forecast(t)
+        assert isinstance(forecast_np, np.ndarray), (
+            "Expected the forecast to be a np.ndarray, "
+            f"but got {type(forecast_np)} instead."
+        )
+        np.testing.assert_allclose(
+            forecast_np.real,
+            forecast_np_pydmd.real,
+            err_msg="Expected the forecast to match the output of PyDMD.",
+        )
+
+        # with Dask
+        forecast_da = solver._predict(t, use_dask=True)
+        assert isinstance(forecast_da, da.Array), (
+            "Expected the forecast to be a da.Array, "
+            f"but got {type(forecast_da)} instead."
+        )
+        forecast_np = forecast_da.compute()
+        np.testing.assert_allclose(
+            forecast_np.real,
+            forecast_np_pydmd.real,
+            err_msg="Expected the forecast to match the output of PyDMD.",
+        )
+    else:
+        # with bagging
+
+        # no Dask
+        np.random.seed(42)
+        forecast_np, forecast_var_np = solver._predict(t, use_dask=False)
+        np.random.seed(42)
+        forecast_np_pydmd, forecast_var_np_pydmd = solver.solver.forecast(t)
+        assert isinstance(forecast_np, np.ndarray), (
+            "Expected the mean forecast to be a np.ndarray, "
+            f"but got {type(forecast_np)} instead."
+        )
+        assert isinstance(forecast_var_np, np.ndarray), (
+            "Expected the forecast variance to be a np.ndarray, "
+            f"but got {type(forecast_var_np)} instead."
+        )
+        np.testing.assert_allclose(
+            forecast_np.real,
+            forecast_np_pydmd.real,
+            err_msg="Expected the mean forecast to match the output of PyDMD.",
+        )
+        np.testing.assert_allclose(
+            forecast_var_np.real,
+            forecast_var_np_pydmd.real,
+            err_msg="Expected the forecast variance to match the output of PyDMD.",
+        )
+
+        # with Dask
+        np.random.seed(42)
+        forecast_da, forecast_var_da = solver._predict(t, use_dask=True)
+        assert isinstance(forecast_da, da.Array), (
+            "Expected the mean forecast to be a da.Array, "
+            f"but got {type(forecast_da)} instead."
+        )
+        assert isinstance(forecast_var_da, da.Array), (
+            "Expected the forecast variance to be a da.Array, "
+            f"but got {type(forecast_var_da)} instead."
+        )
+        forecast_np, forecast_var_np = forecast_da.compute(), forecast_var_da.compute()
+        np.testing.assert_allclose(
+            forecast_np.real,
+            forecast_np_pydmd.real,
+            err_msg="Expected the mean forecast to match the output of PyDMD.",
+        )
+        np.testing.assert_allclose(
+            forecast_var_np.real,
+            forecast_var_np_pydmd.real,
+            err_msg="Expected the forecast variance to match the output of PyDMD.",
+        )
 
 
 @pytest.mark.parametrize("solver", [optdmd, optdmd_bagging])
