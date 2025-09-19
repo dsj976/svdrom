@@ -363,37 +363,37 @@ class OptDMD:
 
         return self
 
-    def _forecast_to_dataarray(
+    def _prediction_to_dataarray(
         self,
-        forecast: np.ndarray
+        prediction: np.ndarray
         | da.Array
         | tuple[da.Array, da.Array]
         | tuple[np.ndarray, np.ndarray],
-        time_forecast: np.ndarray,
+        time_prediction: np.ndarray,
     ) -> xr.DataArray | tuple[xr.DataArray, xr.DataArray]:
-        """Convert the DMD forecast into formatted xarray.DataArray(s).
-        The forecast may be a single array (corresponding to a single
-        deterministic forecast) or a tuple of two arrays (where the first
-        one is the ensemble mean and the second one is the ensemble variance).
-        The second argument is the time vector representing the true forecast
-        time.
-        """
+        """Convert the DMD prediction (i.e. a forecast or a reconstruction)
+        into formatted xarray.DataArray(s). The prediction may be a single
+        array (deterministic) or a tuple of two arrays (ensemble mean and
+        variance). The second argument is the time vector representing the
+        true prediction time."""
         if self._modes is None:
             msg = "The DMD modes have not been computed."
             raise RuntimeError(msg)
 
         dims = (self._modes.dims[0], self._time_dimension)
         coords = {k: v for k, v in self._modes.coords.items() if k != "components"}
-        coords[self._time_dimension] = time_forecast
-        if isinstance(forecast, np.ndarray):
-            return xr.DataArray(forecast, dims=dims, coords=coords, name="dmd_forecast")
-        forecast_mean = xr.DataArray(
-            forecast[0], dims=dims, coords=coords, name="dmd_forecast_mean"
+        coords[self._time_dimension] = time_prediction
+        if isinstance(prediction, np.ndarray):
+            return xr.DataArray(
+                prediction, dims=dims, coords=coords, name="dmd_prediction"
+            )
+        prediction_mean = xr.DataArray(
+            prediction[0], dims=dims, coords=coords, name="dmd_prediction_mean"
         )
-        forecast_var = xr.DataArray(
-            forecast[1], dims=dims, coords=coords, name="dmd_forecast_var"
+        prediction_var = xr.DataArray(
+            prediction[1], dims=dims, coords=coords, name="dmd_prediction_var"
         )
-        return forecast_mean, forecast_var
+        return prediction_mean, prediction_var
 
     def _predict(
         self, t: np.ndarray, use_dask: bool = False
@@ -585,7 +585,7 @@ class OptDMD:
             raise RuntimeError(msg) from e
         logger.info("Done.")
         try:
-            return self._forecast_to_dataarray(forecast, time_forecast)
+            return self._prediction_to_dataarray(forecast, time_forecast)
         except Exception as e:
             msg = "Error trying to convert forecast into xarray.DataArray."
             logger.exception(msg)
