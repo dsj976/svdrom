@@ -498,6 +498,21 @@ class OptDMD:
             ]
         )
 
+    def _estimate_array_size(self, t: np.ndarray) -> int:
+        """Given an input time vector, estimate the size of the array
+        resulting from the corresponding DMD reconstruction or forecast."""
+        if self._modes is None or self._eigs is None or self._amplitudes is None:
+            msg = "Results of the OptDMD fit are not available."
+            logger.exception(msg)
+            raise RuntimeError(msg)
+        array_shape = (self._modes.shape[0], len(t))
+        dtype = np.result_type(
+            self._modes,
+            self._amplitudes,
+            np.exp(np.outer(self._eigs, t)),
+        )
+        return (np.prod(array_shape) * np.dtype(dtype).itemsize).item()
+
     def forecast(
         self,
         forecast_span: str | int,
@@ -541,9 +556,6 @@ class OptDMD:
             msg = "The OptDMD model must be fitted before forecasting."
             logger.exception(msg)
             raise RuntimeError(msg)
-        if self._modes is None or self._eigs is None or self._amplitudes is None:
-            msg = "Results of the OptDMD fit are not available."
-            raise RuntimeError(msg)
         try:
             t_forecast, time_forecast = self._generate_forecast_time_vector(
                 forecast_span, dt
@@ -553,17 +565,10 @@ class OptDMD:
             logger.exception(msg)
             raise RuntimeError(msg) from e
 
-        # estimate the size of the forecast array
-        forecast_shape = (self._modes.shape[0], len(t_forecast))
-        dtype = np.result_type(
-            self._modes,
-            self._amplitudes,
-            np.exp(np.outer(self._eigs, t_forecast.astype("float64"))),
-        )
-        estimated_size = np.prod(forecast_shape) * np.dtype(dtype).itemsize
-
+        estimated_size = self._estimate_array_size(t_forecast.astype("float64"))
         msg = f"Estimated forecast size is {estimated_size/1e3:.3f} KB."
         logger.info(msg)
+
         if estimated_size > memory_limit_bytes:
             logger.info("Will use Dask to compute the forecast.")
             use_dask = True
