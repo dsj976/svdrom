@@ -297,3 +297,49 @@ def test_forecast(solver):
             f"Expected 'forecast_var' to have shape {expected_forecast_shape}, "
             f"but got {forecast.shape}."
         )
+
+
+@pytest.mark.parametrize("t", [slice(5), slice(5, 10), 10])
+@pytest.mark.parametrize("solver", [optdmd, optdmd_bagging])
+def test_reconstruct(solver, t):
+    """Test for the reconstruct() method."""
+    reconstruction = solver.reconstruct(t)
+    expected_reconstruct_dims = (generator.u.dims[0], solver.time_dimension)
+    if solver.num_trials == 0:
+        assert isinstance(reconstruction, xr.DataArray), (
+            "Expected 'reconstruction' to be of type 'xr.DataArray', "
+            f"but got {type(reconstruction)} instead."
+        )
+        assert reconstruction.dims == expected_reconstruct_dims, (
+            "Expected 'reconstruction' to have dimensions "
+            f"{expected_reconstruct_dims}, but got {reconstruction.dims} instead."
+        )
+        if isinstance(t, slice):
+            assert reconstruction.shape == (solver._modes.shape[0], 5)
+        else:
+            assert reconstruction.shape == (solver._modes.shape[0], 1)
+        np.testing.assert_array_equal(
+            reconstruction[solver.time_dimension].values, solver.time_fit[t]
+        )
+    else:
+        reconstruction_mean, reconstruction_var = reconstruction
+        assert isinstance(reconstruction_mean, xr.DataArray), (
+            "Expected 'reconstruction_mean' to be of type 'xr.DataArray', "
+            f"but got {type(reconstruction_mean)} instead."
+        )
+        assert isinstance(reconstruction_var, xr.DataArray), (
+            "Expected 'reconstruction_var' to be of type 'xr.DataArray', "
+            f"but got {type(reconstruction_var)} instead."
+        )
+        for array in (reconstruction_mean, reconstruction_var):
+            assert array.dims == expected_reconstruct_dims, (
+                "Expected 'reconstruction' to have dimensions "
+                f"{expected_reconstruct_dims}, but got {array.dims} instead."
+            )
+            np.testing.assert_array_equal(
+                array[solver.time_dimension].values, solver.time_fit[t]
+            )
+            if isinstance(t, slice):
+                assert array.shape == (solver._modes.shape[0], 5)
+            else:
+                assert array.shape == (solver._modes.shape[0], 1)

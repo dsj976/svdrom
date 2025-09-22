@@ -590,3 +590,115 @@ class OptDMD:
             msg = "Error trying to convert forecast into xarray.DataArray."
             logger.exception(msg)
             raise RuntimeError(msg) from e
+
+    def reconstruct(
+        self,
+        t: slice | int | str | None = None,
+        memory_limit_bytes: float = 1e9,
+    ) -> xr.DataArray | tuple[xr.DataArray, xr.DataArray]:
+        """Produces a reconstruction of the training data using the fitted
+        OptDMD model over a specified time span. The model must be fitted
+        before calling this method.
+
+        Parameters
+        ----------
+        t: slice | int | str | None, optional
+            The time span over which to perform the DMD reconstruction. If
+            't' is a slice, it may contain integers or strings, where integers
+            and strings are interpreted as starting and stopping indices or labels
+            of the fit time vector, respectively. To reconstruct a single snapshot,
+            't' should be an integer or string specifying the index or label of the
+            desired snapshot. If 't' is None, a reconstruction of the whole training
+            dataset is produced, which could potentially be very large. The default is
+            None.
+        memory_limit_bytes: float, optional
+            The memory threshold that decides whether to compute the reconstruction
+            using NumPy or Dask. If the estimated array size is below
+            memory_limit_bytes, NumPy is used and the reconstruction is returned as
+            a NumPy-backed Xarray. If the estimated array size is above
+            memory_limit_bytes, Dask is used and the reconstruction is returned as
+            a Dask-backed Xarray.
+
+        Returns
+        -------
+        xarray.DataArray | tuple[xarray.DataArray, xarray.DataArray]
+            The reconstructed data as an xarray.DataArray. If bagging is used,
+            two xarray.DataArray are returned where the first one is the
+            ensemble mean and the second one is the ensemble variance. The
+            Xarrays are NumPy-backed or Dask-backed depending on the
+            'memory_limit_bytes' parameter.
+        """
+        if self._solver is None:
+            msg = "The OptDMD model must be fitted before reconstructing."
+            logger.exception(msg)
+            raise RuntimeError(msg)
+        if self._time_fit is None or self._t_fit is None:
+            msg = "The OptDMD fit time vector is not available."
+            raise RuntimeError(msg)
+
+        def _check_slice_type(t: slice) -> str:
+            """Check if the slice is index or label based."""
+            if (isinstance(t.start, int) or t.start is None) and isinstance(
+                t.stop, int
+            ):
+                return "index"
+            if (isinstance(t.start, str) or t.start is None) and isinstance(
+                t.stop, str
+            ):
+                return "label"
+            msg = "Slice must contain time coordinate indices or labels."
+            logger.exception(msg)
+            raise ValueError(msg)
+
+        try:
+            if (isinstance(t, slice) and _check_slice_type(t) == "label") or isinstance(
+                t, str
+            ):
+                time_fit = xr.DataArray(
+                    self._time_fit, dims="time", coords={"time": self._time_fit}
+                )
+                time_reconstruct = time_fit.sel(time=t).values
+            elif (
+                isinstance(t, slice) and _check_slice_type(t) == "index"
+            ) or isinstance(t, int):
+                time_reconstruct = self._time_fit[t]
+            elif t is None:
+                time_reconstruct = self._time_fit
+            else:
+                msg = "Parameter 't' must be a slice, an integer, a string or None."
+                logger.exception(msg)
+                raise ValueError(msg)
+            _, ind, _ = np.intersect1d(
+                self._time_fit, time_reconstruct, return_indices=True
+            )
+            t_reconstruct = self._t_fit[ind]
+        except Exception as e:
+            msg = "Error trying to generate the reconstruction time vector."
+            logger.exception(msg)
+            raise RuntimeError(msg) from e
+
+        estimated_size = self._estimate_array_size(t_reconstruct.astype("float64"))
+        msg = f"Estimated reconstruction size is {estimated_size/1e3:.3f} KB."
+        logger.info(msg)
+
+        if estimated_size > memory_limit_bytes:
+            logger.info("Will use Dask to compute the reconstruction.")
+            use_dask = True
+        else:
+            logger.info("Will not use Dask to compute the reconstruction.")
+            use_dask = False
+
+        logger.info("Computing the DMD reconstruction...")
+        try:
+            reconstruction = self._predict(t_reconstruct.astype("float64"), use_dask)
+        except Exception as e:
+            msg = "Error computing the DMD reconstruction."
+            logger.exception(msg)
+            raise RuntimeError(msg) from e
+        logger.info("Done.")
+        try:
+            return self._prediction_to_dataarray(reconstruction, time_reconstruct)
+        except Exception as e:
+            msg = "Error trying to convert reconstruction into xarray.DataArray."
+            logger.exception(msg)
+            raise RuntimeError(msg) from e
