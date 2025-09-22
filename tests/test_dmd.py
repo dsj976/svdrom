@@ -37,6 +37,15 @@ def test_basic(solver):
     assert hasattr(
         solver, "time_fit"
     ), "OptDMD object is missing the 'time_fit' attribute."
+    assert hasattr(
+        solver, "num_trials"
+    ), "OptDMD object is missing the 'num_trials' attribute."
+    assert hasattr(
+        solver, "trial_size"
+    ), "OptDMD object is missing the 'trial_size' attribute."
+    assert hasattr(
+        solver, "parallel_bagging"
+    ), "OptDMD object is missing the 'parallel_bagging' attribute."
 
 
 @pytest.mark.parametrize("solver", [optdmd, optdmd_bagging])

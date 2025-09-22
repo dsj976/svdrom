@@ -18,6 +18,7 @@ class OptDMD:
         time_units: Literal["s", "h"] = "s",
         num_trials: int = 0,
         trial_size: int | float = 0.6,
+        parallel_bagging: bool = False,
     ) -> None:
         """Optimized Dynamic Mode Decomposition (DMD) via variable
         projection method for nonlinear least squares, with optional
@@ -37,13 +38,19 @@ class OptDMD:
             Units in which to treat the time dimension. Default is "s".
             Must be one of {"s", "h"}, where "s" is seconds and "h" is hours.
         num_trials: int
-            Number of bagging trials to perform. Default is 0 (no bagging).
+            Number of bagging trials to perform during the OptDMD fit.
+            Default is 0 (no bagging).
         trial_size: int | float
             Size of the randomly selected subset of snapshots to use for
             each trial of bagged optimized DMD. If it's a positive integer,
             "trial_size" many snapshots will be used per trial. If it's a
             float between 0 and 1, then "trial_size" denotes the fraction of
             snapshots to be used per trial. Default is 0.6.
+        parallel_bagging: bool
+            Whether to perform bagging sequentially (False) or in parallel
+            (True). The default is False. Only active when 'num_trials' is
+            greater than zero. Note that, for parallel bagging to actually take
+            place, a Dask multi-processing or distributed scheduler must be employed.
 
         Notes
         -----
@@ -77,6 +84,7 @@ class OptDMD:
         self._time_units = time_units
         self._num_trials = num_trials
         self._trial_size = trial_size
+        self._parallel_bagging = parallel_bagging
         self._eigs: np.ndarray | None = None
         self._eigs_std: np.ndarray | None = None
         self._amplitudes: np.ndarray | None = None
@@ -155,6 +163,11 @@ class OptDMD:
     def time_fit(self) -> np.ndarray | None:
         """The time vector for the DMD fit (read-only)."""
         return self._time_fit
+
+    @property
+    def parallel_bagging(self) -> bool:
+        """Whether bagging is performed sequentially or in parallel (read-only)."""
+        return self._parallel_bagging
 
     def _check_svd_inputs(self, u: xr.DataArray, s: np.ndarray, v: xr.DataArray):
         """Check that the passed SVD results are valid."""
@@ -344,11 +357,17 @@ class OptDMD:
             proj_basis=u.data,
             num_trials=self._num_trials,
             trial_size=self._trial_size,
+            parallel_bagging=self._parallel_bagging,
             **kwargs,
-        )
+        )  # type: ignore[call-arg]
         t_fit, _ = self._generate_fit_time_vector(v)
         logger.info("Computing the DMD fit...")
         try:
+            if self._num_trials > 0:
+                if self._parallel_bagging:
+                    logger.info("Bagging will be performed in parallel.")
+                else:
+                    logger.info("Bagging will be performed sequentially.")
             bopdmd.fit_econ(
                 s,
                 v.data,
