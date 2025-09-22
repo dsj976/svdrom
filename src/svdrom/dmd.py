@@ -519,8 +519,7 @@ class OptDMD:
         dt: str | int | None,
         memory_limit_bytes: float = 1e9,
     ) -> xr.DataArray | tuple[xr.DataArray, xr.DataArray]:
-        """
-        Generates a forecast using the fitted OptDMD model over a specified
+        """Generates a forecast using the fitted OptDMD model over a specified
         time span. The model must be fitted before calling this method.
 
         Parameters
@@ -535,13 +534,13 @@ class OptDMD:
             If int, interpreted as number of forecast points. If None, uses
             the average time step of the training data on which the DMD model
             was fitted.
-        memory_limit_bytes: float
+        memory_limit_bytes: float, optional
             The memory threshold that decides whether to compute the forecast
             using NumPy or Dask. If the estimated array size is below
             memory_limit_bytes, NumPy is used and the forecast is returned as
             a NumPy-backed Xarray. If the estimated array size is above
             memory_limit_bytes, Dask is used and the forecast is returned as
-            a Dask-backed Xarray.
+            a Dask-backed Xarray. The default value is 1e9 (1 GB).
 
         Returns
         -------
@@ -617,7 +616,7 @@ class OptDMD:
             memory_limit_bytes, NumPy is used and the reconstruction is returned as
             a NumPy-backed Xarray. If the estimated array size is above
             memory_limit_bytes, Dask is used and the reconstruction is returned as
-            a Dask-backed Xarray.
+            a Dask-backed Xarray. The default value is 1e9 (1 GB).
 
         Returns
         -------
