@@ -31,7 +31,7 @@ dependencies = [
   "zarr<=3.1.0",
   "dask[complete]",
   "xarray[complete]",
-  "pydmd >= 2025.8.1",
+  "pydmd @ git+https://github.com/ClimeTrend/PyDMD.git",
 ]
 
 [project.optional-dependencies]
