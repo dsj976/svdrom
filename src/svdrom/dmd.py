@@ -1,3 +1,4 @@
+import warnings
 from typing import Literal
 
 import dask.array as da
@@ -94,6 +95,7 @@ class OptDMD:
         self._solver: BOPDMD | None = None
         self._time_fit: np.ndarray | None = None
         self._t_fit: np.ndarray | None = None  # internal use only
+        self._dynamics: xr.DataArray | None = None
 
     @property
     def n_modes(self) -> int:
@@ -168,6 +170,13 @@ class OptDMD:
     def parallel_bagging(self) -> bool:
         """Whether bagging is performed sequentially or in parallel (read-only)."""
         return self._parallel_bagging
+
+    @property
+    def dynamics(self) -> xr.DataArray | None:
+        """The time evolution of each DMD mode,
+        scaled by the mode amplitude (read-only).
+        """
+        return self._dynamics
 
     def _check_svd_inputs(self, u: xr.DataArray, s: np.ndarray, v: xr.DataArray):
         """Check that the passed SVD results are valid."""
@@ -307,15 +316,25 @@ class OptDMD:
 
         return t_forecast, time_forecast
 
-    def _extract_results(self, bopdmd: BOPDMD, u: xr.DataArray) -> None:
-        """Given the fitted BOPDMD instance and the left singular vectors
-        containing the spatial information, extract the DMD results and
-        store them in the instance attributes."""
+    def _extract_results(
+        self, bopdmd: BOPDMD, u: xr.DataArray, v: xr.DataArray
+    ) -> None:
+        """Given the fitted BOPDMD instance, the left singular vectors
+        containing the spatial information, and the right singular vectors
+        containing the temporal information, store them in the instance attributes."""
         self._solver = bopdmd
         self._modes = u.copy(data=bopdmd.modes)  # use new data with original structure
         self._modes.name = "dmd_modes"
         self._eigs = bopdmd.eigs
         self._amplitudes = bopdmd.amplitudes
+        try:
+            self._dynamics = v.copy(
+                data=bopdmd.dynamics
+            )  # use new data with original structure
+        except Exception:
+            msg = "Could not retrieve dynamics from BOPDMD solver."
+            logger.warning(msg)
+            warnings.warn(msg, RuntimeWarning, stacklevel=2)
         if self.num_trials > 0:
             self._modes_std = u.copy(data=bopdmd.modes_std)
             self._modes_std.name = "dmd_modes_std"
@@ -378,7 +397,7 @@ class OptDMD:
             logger.exception(msg)
             raise RuntimeError(msg) from e
         logger.info("Done.")
-        self._extract_results(bopdmd, u)
+        self._extract_results(bopdmd, u, v)
 
         return self
 

@@ -46,6 +46,9 @@ def test_basic(solver):
     assert hasattr(
         solver, "parallel_bagging"
     ), "OptDMD object is missing the 'parallel_bagging' attribute."
+    assert hasattr(
+        solver, "dynamics"
+    ), "OptDMD object is missing the 'dynamics' attribute."
 
 
 @pytest.mark.parametrize("solver", [optdmd, optdmd_bagging])
@@ -129,6 +132,22 @@ def test_fit_outputs(solver):
             "Expected 'amplitudes_std' to be np.ndarray, "
             f"but got {solver.amplitudes_std} instead."
         )
+
+
+@pytest.mark.parametrize("solver", [optdmd, optdmd_bagging])
+def test_dynamics_attr(solver):
+    """Test the dynamics attribute."""
+    dynamics = solver.dynamics
+    assert isinstance(dynamics, xr.DataArray), (
+        "Expected 'dynamics' to be of type 'xr.DataArray', "
+        f"but got {type(dynamics)} instead."
+    )
+    assert isinstance(dynamics.data, np.ndarray), (
+        "Expected the 'dynamics' DataArray to be backed by a "
+        f"np.ndarray, but got a {type(dynamics.data)} instead."
+    )
+    assert dynamics.shape == (solver.n_modes, len(solver.time_fit))
+    assert dynamics.dims == ("components", "time")
 
 
 @pytest.mark.parametrize("forecast_span", ["10 s", 10])
