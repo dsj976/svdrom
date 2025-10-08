@@ -209,3 +209,69 @@ def test_reconstruct_snapshot(matrix_type):
     assert X_r.shape == (
         tsvd.u.shape[0],
     ), f"Reconstructed snapshot should have shape ({tsvd.u.shape[0]}), got {X_r.shape}."
+
+
+@pytest.mark.parametrize("matrix_type", ["tall-and-skinny", "short-and-fat"])
+@pytest.mark.parametrize("compute_initially", [True, False])
+def test_reconstruct_size_based_computation(matrix_type, compute_initially):
+    """Test the reconstruct method's size-based computation (NumPy vs Dask)."""
+    X = make_dataarray(matrix_type)
+    n_components = 10
+    tsvd = TruncatedSVD(
+        n_components=n_components,
+        compute_u=compute_initially,
+        compute_v=compute_initially,
+    )
+    tsvd.fit(X)
+
+    # --- 1. Test NumPy path (in-memory) ---
+    # Force NumPy path by setting a very high memory limit
+    X_recon_np = tsvd.reconstruct(memory_limit_bytes=1e12)  # 1 TB limit
+
+    assert isinstance(
+        X_recon_np.data, np.ndarray
+    ), "Reconstruction should be NumPy-backed for a large memory limit."
+    assert X_recon_np.shape == X.shape, "Reconstructed shape must match original."
+    assert X_recon_np.dims == X.dims, "Reconstructed dims must match original."
+    # Verify coordinates are preserved
+    assert X_recon_np.coords["samples"].equals(X.coords["samples"])
+    assert X_recon_np.coords["time"].equals(X.coords["time"])
+
+    # --- 2. Test Dask path (out-of-memory) ---
+    # Force Dask path by setting a very low memory limit
+    X_recon_da = tsvd.reconstruct(memory_limit_bytes=1)  # 1 Byte limit
+
+    assert isinstance(
+        X_recon_da.data, da.Array
+    ), "Reconstruction should be Dask-backed for a small memory limit."
+    assert X_recon_da.shape == X.shape, "Lazy reconstructed shape must match original."
+    assert X_recon_da.dims == X.dims, "Lazy reconstructed dims must match original."
+
+    # --- 3. Verify correctness of both results ---
+    # Compute the original and Dask-reconstructed data to compare
+    X_original_np = X.compute()
+    X_recon_da_computed = X_recon_da.compute()
+
+    # The NumPy-path result and the computed Dask-path result should be identical
+    np.testing.assert_allclose(
+        X_recon_np.data,
+        X_recon_da_computed,
+        rtol=1e-5,
+        err_msg="NumPy and Dask path reconstructions should be nearly identical.",
+    )
+
+    # Both reconstructions should be a close approximation of the original data
+    # We use a loose tolerance because it's a low-rank approximation
+    reconstruction_error = np.linalg.norm(
+        X_original_np - X_recon_np.data
+    ) / np.linalg.norm(X_original_np)
+    assert reconstruction_error < 0.5, "Reconstruction error is unexpectedly high."
+
+
+def test_reconstruct_before_fit_raises_error():
+    """Test that calling reconstruct() before fit() raises a ValueError."""
+    tsvd = TruncatedSVD(n_components=5)
+    with pytest.raises(
+        ValueError, match="The SVD model must be fitted before calling reconstruct"
+    ):
+        tsvd.reconstruct()

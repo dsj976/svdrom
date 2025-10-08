@@ -94,6 +94,8 @@ class TruncatedSVD:
         self._s: np.ndarray | None = None
         self._v: xr.DataArray | None = None
         self._explained_var_ratio: np.ndarray | da.Array | None = None
+        self._original_dims: tuple | None = None
+        self._original_coords: dict | None = None
 
     @property
     def n_components(self) -> int:
