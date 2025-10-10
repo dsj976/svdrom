@@ -10,8 +10,8 @@ from svdrom.dmd import OptDMD
 generator = DataGenerator()
 generator.generate_svd_results(n_components=10)
 
-optdmd = OptDMD()
-optdmd_bagging = OptDMD(num_trials=5)
+optdmd = OptDMD(seed=1234)
+optdmd_bagging = OptDMD(num_trials=5, seed=1234)
 
 # set the dask scheduler to single-threaded
 dask.config.set(scheduler="single-threaded")
@@ -233,9 +233,7 @@ def test_predict(solver):
         # with bagging
 
         # no Dask
-        np.random.seed(42)
         forecast_np, forecast_var_np = solver._predict(t, use_dask=False)
-        np.random.seed(42)
         forecast_np_pydmd, forecast_var_np_pydmd = solver.solver.forecast(t)
         assert isinstance(forecast_np, np.ndarray), (
             "Expected the mean forecast to be a np.ndarray, "
@@ -257,7 +255,6 @@ def test_predict(solver):
         )
 
         # with Dask
-        np.random.seed(42)
         forecast_da, forecast_var_da = solver._predict(t, use_dask=True)
         assert isinstance(forecast_da, da.Array), (
             "Expected the mean forecast to be a da.Array, "

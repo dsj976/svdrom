@@ -20,6 +20,7 @@ class OptDMD:
         num_trials: int = 0,
         trial_size: int | float = 0.6,
         parallel_bagging: bool = False,
+        seed: int | None = None,
     ) -> None:
         """Optimized Dynamic Mode Decomposition (DMD) via variable
         projection method for nonlinear least squares, with optional
@@ -52,6 +53,12 @@ class OptDMD:
             (True). The default is False. Only active when 'num_trials' is
             greater than zero. Note that, for parallel bagging to actually take
             place, a Dask multi-processing or distributed scheduler must be employed.
+        seed: int | None
+            Random seed used to initialize the random number generator.
+            Default is None, which initializes the random number generator using
+            system entropy. Used only if `num_trials` is a positive integer, i.e.
+            when performing bagging. Set seed to a fixed integer value to obtain
+            reproducible results.
 
         Notes
         -----
@@ -86,6 +93,7 @@ class OptDMD:
         self._num_trials = num_trials
         self._trial_size = trial_size
         self._parallel_bagging = parallel_bagging
+        self._seed = seed
         self._eigs: np.ndarray | None = None
         self._eigs_std: np.ndarray | None = None
         self._amplitudes: np.ndarray | None = None
@@ -377,6 +385,7 @@ class OptDMD:
             num_trials=self._num_trials,
             trial_size=self._trial_size,
             parallel_bagging=self._parallel_bagging,
+            seed=self._seed,
             **kwargs,
         )  # type: ignore[call-arg]
         t_fit, _ = self._generate_fit_time_vector(v)
@@ -451,7 +460,9 @@ class OptDMD:
             msg = "Results of the OptDMD fit are not available."
             raise RuntimeError(msg)
 
-        def draw_from_rand_distr() -> tuple[np.ndarray, np.ndarray]:
+        def draw_from_rand_distr(
+            rng: np.random.Generator,
+        ) -> tuple[np.ndarray, np.ndarray]:
             """Draw eigenvalues and amplitudes from a normal distribution
             scaled by the computed standard deviation.
             """
@@ -466,15 +477,16 @@ class OptDMD:
                 msg = "The DMD bagging statistics have not been computed."
                 raise RuntimeError(msg)
             eigs = self._eigs + np.multiply(
-                np.random.randn(*self._eigs.shape),
+                rng.standard_normal(*self._eigs.shape),
                 self._eigs_std,
             )
             amps = self._amplitudes + np.multiply(
-                np.random.randn(*self._amplitudes.shape),
+                rng.standard_normal(*self._amplitudes.shape),
                 self._amplitudes_std,
             )
             return eigs, amps
 
+        rng = np.random.default_rng(self._seed)
         predictions = []
         if use_dask:
             chunk_size = min(100_000, self._modes.shape[0])
@@ -487,7 +499,7 @@ class OptDMD:
                 # to produce multiple prediction realizations
                 for _ in range(self._num_trials):
                     # draw eigenvalues and amplitudes from random distribution
-                    eigs, amps = draw_from_rand_distr()
+                    eigs, amps = draw_from_rand_distr(rng)
                     amps_da = da.from_array(
                         np.diag(amps),
                         chunks=(self._modes.shape[1], self._modes.shape[1]),
@@ -519,7 +531,7 @@ class OptDMD:
             # if bagging has been used, use Monte-Carlo uncertainty propagation
             # to produce multiple prediction realizations
             for _ in range(self._num_trials):
-                eigs, amps = draw_from_rand_distr()
+                eigs, amps = draw_from_rand_distr(rng)
                 forecast = np.linalg.multi_dot(
                     [self._modes, np.diag(amps), np.exp(np.outer(eigs, t))]
                 )
