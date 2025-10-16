@@ -569,7 +569,7 @@ class OptDMD:
     def forecast(
         self,
         forecast_span: str | int,
-        dt: str | int | None,
+        dt: str | int | None = None,
         memory_limit_bytes: float = 1e9,
     ) -> xr.DataArray | tuple[xr.DataArray, xr.DataArray]:
         """Generates a forecast using the fitted OptDMD model over a specified
@@ -586,7 +586,7 @@ class OptDMD:
             should be in the format "value units", e.g. "1 h" for 1 hour.
             If int, interpreted as number of forecast points. If None, uses
             the average time step of the training data on which the DMD model
-            was fitted.
+            was fitted. The default is None.
         memory_limit_bytes: float, optional
             The memory threshold that decides whether to compute the forecast
             using NumPy or Dask. If the estimated array size is below
