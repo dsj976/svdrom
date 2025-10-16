@@ -1,9 +1,11 @@
 import warnings
 from typing import Literal
 
+import dask
 import dask.array as da
 import numpy as np
 import xarray as xr
+from dask.utils import parse_bytes
 from pydmd import BOPDMD
 
 from svdrom.logger import setup_logger
@@ -490,10 +492,11 @@ class OptDMD:
         predictions = []
 
         if use_dask:
-            # use Dask to compute the prediction, chunking along
-            # the time dimension which allows to more efficiently
-            # unstack the spatial dimension if necessary
-            target_chunk_bytes = 100e6  # 100 MB
+            # Use Dask to compute the prediction, chunking along
+            # the time dimension, which allows to more efficiently
+            # unstack the spatial dimension if necessary.
+            # The target chunk size is based on the Dask config default.
+            target_chunk_bytes = parse_bytes(dask.config.get("array.chunk-size"))
             bytes_per_snapshot = self._modes[:, 0].nbytes
             time_chunk_size = round(target_chunk_bytes / bytes_per_snapshot)
 
