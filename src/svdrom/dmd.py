@@ -488,25 +488,25 @@ class OptDMD:
 
         rng = np.random.default_rng(self._seed)
         predictions = []
-        if use_dask:
-            chunk_size = min(100_000, self._modes.shape[0])
-            modes_da = da.from_array(
-                self._modes, chunks=(chunk_size, self._modes.shape[1])
-            )
 
+        if use_dask:
+            # use Dask to compute the prediction, chunking along
+            # the time dimension which allows to more efficiently
+            # unstack the spatial dimension if necessary
+            target_chunk_bytes = 100e6  # 100 MB
+            bytes_per_snapshot = self._modes[:, 0].nbytes
+            time_chunk_size = round(target_chunk_bytes / bytes_per_snapshot)
+
+            modes_da = da.from_array(self._modes, chunks=(-1, -1))
             if self._eigs_std is not None and self._amplitudes_std is not None:
                 # when bagging has been used, use Monte-Carlo uncertainty propagation
                 # to produce multiple prediction realizations
                 for _ in range(self._num_trials):
                     # draw eigenvalues and amplitudes from random distribution
                     eigs, amps = draw_from_rand_distr(rng)
-                    amps_da = da.from_array(
-                        np.diag(amps),
-                        chunks=(self._modes.shape[1], self._modes.shape[1]),
-                    )
+                    amps_da = da.from_array(np.diag(amps), chunks=(-1, -1))
                     exp_da = da.from_array(
-                        np.exp(np.outer(eigs, t)),
-                        chunks=(self._modes.shape[1], len(t)),
+                        np.exp(np.outer(eigs, t)), chunks=(-1, time_chunk_size)
                     )
                     # compute a prediction realization
                     prediction_da = da.dot(modes_da, da.dot(amps_da, exp_da))
@@ -518,11 +518,11 @@ class OptDMD:
 
             amps_da = da.from_array(
                 np.diag(self._amplitudes),
-                chunks=(self._modes.shape[1], self._modes.shape[1]),
+                chunks=(-1, -1),
             )
             exp_da = da.from_array(
                 np.exp(np.outer(self._eigs, t)),
-                chunks=(self._modes.shape[1], len(t)),
+                chunks=(-1, time_chunk_size),
             )
             return da.dot(modes_da, da.dot(amps_da, exp_da))
 
