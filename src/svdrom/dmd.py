@@ -432,7 +432,7 @@ class OptDMD:
         dims = (self._modes.dims[0], self._time_dimension)
         coords = {k: v for k, v in self._modes.coords.items() if k != "components"}
         coords[self._time_dimension] = time_prediction
-        if isinstance(prediction, np.ndarray):
+        if isinstance(prediction, (np.ndarray | da.Array)):
             return xr.DataArray(
                 prediction, dims=dims, coords=coords, name="dmd_prediction"
             )
