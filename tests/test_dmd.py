@@ -197,8 +197,8 @@ def test_predict(solver):
     same output as BOPDMD.forecast() from PyDMD.
     """
     t, _ = solver._generate_forecast_time_vector(
-        forecast_span="10 s",
-        dt="1 s",
+        forecast_span="20 s",
+        dt="2 s",
     )
     t = t.astype("float64")
     if solver.num_trials == 0:
@@ -280,10 +280,15 @@ def test_predict(solver):
 @pytest.mark.parametrize("solver", [optdmd, optdmd_bagging])
 def test_forecast(solver):
     """Test for the forecast() method."""
+    forecast_span, dt = "10 s", "1 s"
     expected_forecast_shape = (generator.u.shape[0], 10)
     expected_forecast_dims = (generator.u.dims[0], solver.time_dimension)
+    _, expected_forecast_t_vector = solver._generate_forecast_time_vector(
+        forecast_span=forecast_span,
+        dt=dt,
+    )
     if solver.num_trials == 0:
-        forecast = solver.forecast(forecast_span="10 s", dt="1 s")
+        forecast = solver.forecast(forecast_span=forecast_span, dt=dt)
         assert isinstance(forecast, xr.DataArray), (
             "Expected 'forecast' to be of type 'xr.DataArray', "
             f"but got {type(forecast)} instead."
@@ -295,9 +300,17 @@ def test_forecast(solver):
         assert forecast.shape == expected_forecast_shape, (
             f"Expected 'forecast' to have shape {expected_forecast_shape}, "
             f"but got {forecast.shape}."
+        )
+        np.testing.assert_equal(
+            forecast.time.values,
+            expected_forecast_t_vector,
+            err_msg=(
+                f"Expected the forecast time vector to be "
+                f"{expected_forecast_t_vector}, but got {forecast.time.values}."
+            ),
         )
     else:
-        forecast, forecast_var = solver.forecast(forecast_span="10 s", dt="1 s")
+        forecast, forecast_var = solver.forecast(forecast_span=forecast_span, dt=dt)
         assert isinstance(forecast, xr.DataArray), (
             "Expected 'forecast' to be of type 'xr.DataArray', "
             f"but got {type(forecast)} instead."
@@ -309,6 +322,14 @@ def test_forecast(solver):
         assert forecast.shape == expected_forecast_shape, (
             f"Expected 'forecast' to have shape {expected_forecast_shape}, "
             f"but got {forecast.shape}."
+        )
+        np.testing.assert_equal(
+            forecast.time.values,
+            expected_forecast_t_vector,
+            err_msg=(
+                f"Expected the forecast time vector to be "
+                f"{expected_forecast_t_vector}, but got {forecast.time.values}."
+            ),
         )
         assert isinstance(forecast_var, xr.DataArray), (
             "Expected 'forecast_var' to be of type 'xr.DataArray', "
@@ -321,6 +342,14 @@ def test_forecast(solver):
         assert forecast_var.shape == expected_forecast_shape, (
             f"Expected 'forecast_var' to have shape {expected_forecast_shape}, "
             f"but got {forecast.shape}."
+        )
+        np.testing.assert_equal(
+            forecast_var.time.values,
+            expected_forecast_t_vector,
+            err_msg=(
+                "Expected the forecast variance time vector to be "
+                f"{expected_forecast_t_vector}, but got {forecast.time.values}."
+            ),
         )
 
 
