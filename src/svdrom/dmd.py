@@ -19,6 +19,7 @@ class OptDMD:
         n_modes: int = -1,
         time_dimension: str = "time",
         time_units: Literal["s", "h"] = "s",
+        input_time_units: Literal["s", "h"] | None = None,
         num_trials: int = 0,
         trial_size: int | float = 0.6,
         parallel_bagging: bool = False,
@@ -75,6 +76,10 @@ class OptDMD:
             msg = "'time_units' must be one of {'s', 'h'}."
             logger.exception(msg)
             raise ValueError(msg)
+        if input_time_units is not None and input_time_units not in {"s", "h"}:
+            msg = "'input_time_units' must be one of {'s', 'h'}."
+            logger.exception(msg)
+            raise ValueError(msg)
         if num_trials < 0 or not isinstance(num_trials, int):
             msg = "'num_trials' must be an integer greater than zero."
             logger.exception(msg)
@@ -92,6 +97,7 @@ class OptDMD:
         self._n_modes = n_modes
         self._time_dimension = time_dimension
         self._time_units = time_units
+        self._input_time_units = input_time_units or time_units
         self._num_trials = num_trials
         self._trial_size = trial_size
         self._parallel_bagging = parallel_bagging
@@ -105,6 +111,7 @@ class OptDMD:
         self._solver: BOPDMD | None = None
         self._time_fit: np.ndarray | None = None
         self._t_fit: np.ndarray | None = None  # internal use only
+        self._is_datetime: bool = False  # internal use only
         self._dynamics: xr.DataArray | None = None
 
     @property
@@ -221,6 +228,16 @@ class OptDMD:
             logger.exception(msg)
             raise ValueError(msg)
 
+    def _get_time_conversion_factor(self, from_units: str, to_units: str) -> float:
+        """Get the time conversion factor from one unit of time to another.
+        Currently, only seconds ('s') and hours ('h') are supported.
+        """
+        to_seconds = {
+            "s": 1.0,
+            "h": 3600.0,
+        }
+        return to_seconds[from_units] / to_seconds[to_units]
+
     def _generate_fit_time_vector(
         self, v: xr.DataArray
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -228,11 +245,27 @@ class OptDMD:
         information, generate the time vector for the DMD fit.
         """
         time_fit = v[self._time_dimension].values
-        time_deltas = np.diff(time_fit).astype(f"timedelta64[{self._time_units}]")
-        time_vector = np.cumsum(time_deltas)
-        start_time = np.array([0], dtype=f"timedelta64[{self._time_units}]")
+        time_deltas = np.diff(time_fit)
+
+        if np.issubdtype(time_deltas.dtype, np.timedelta64):
+            # if the input time vector contains datetimes
+            self._is_datetime = True
+            time_deltas_td = time_deltas.astype(f"timedelta64[{self._time_units}]")
+            time_deltas_float = time_deltas_td / np.timedelta64(1, self._time_units)
+        else:
+            # if the input time vector contains floats
+            self._is_datetime = False
+            time_deltas_float = time_deltas.astype(np.float64)
+            conversion_factor = self._get_time_conversion_factor(
+                self._input_time_units,
+                self._time_units,
+            )
+            time_deltas_float *= conversion_factor
+
+        time_vector = np.cumsum(time_deltas_float)
         self._time_fit = time_fit  # vector representing true time of the training data
-        self._t_fit = np.concat(
+        start_time = np.array([0], dtype=np.float64)
+        self._t_fit = np.concatenate(
             (start_time, time_vector)
         )  # vector to be fed to the `fit()` call
         return self._t_fit, self._time_fit
@@ -268,7 +301,8 @@ class OptDMD:
 
         # parse forecast_span
         if isinstance(forecast_span, int):
-            span = np.timedelta64(forecast_span, self._time_units)
+            # forecast span is an integer
+            span_td = np.timedelta64(forecast_span, self._time_units)
         else:
             # forecast_span is a string
             span_parts = forecast_span.split(" ")
@@ -278,13 +312,14 @@ class OptDMD:
                     "e.g. '30 D'."
                 )
                 raise ValueError(msg)
-            span = np.timedelta64(int(span_parts[0]), span_parts[1])  # type: ignore[call-overload]
+            span_td = np.timedelta64(int(span_parts[0]), span_parts[1])  # type: ignore[call-overload]
+        span_float = span_td / np.timedelta64(1, self._time_units)
 
         # determine time step
         if dt is None:
             # use average time step of training data
             if len(self._t_fit) > 1:
-                time_step = np.mean(np.diff(self._t_fit))
+                time_step_float = np.mean(np.diff(self._t_fit))
             else:
                 msg = (
                     "Cannot determine time step from training data "
@@ -297,28 +332,35 @@ class OptDMD:
             if len(dt_parts) != 2:
                 msg = "String dt must be in the format 'value units', e.g. '1 h'."
                 raise ValueError(msg)
-            time_step = np.timedelta64(int(dt_parts[0]), dt_parts[1])  # type: ignore[call-overload]
+            time_step_td = np.timedelta64(int(dt_parts[0]), dt_parts[1])  # type: ignore[call-overload]
+            time_step_float = time_step_td / np.timedelta64(1, self._time_units)
         else:
             # dt is an int and specifies number of points
             if dt <= 0:
                 msg = "Number of forecast points must be positive."
                 raise ValueError(msg)
             # calculate time step to get the requested number of points
-            time_step = span / dt
-
-        # generate the time vector representing true time of the forecast
-        forecast_start = self._time_fit[-1]
-        forecast_end = forecast_start + span
-        time_forecast = np.arange(
-            forecast_start + time_step,
-            forecast_end + time_step,
-            time_step,
-        )
+            time_step_float = span_float / dt
+        time_step_td = time_step_float.astype(f"timedelta64[{self._time_units}]")
 
         # generate the time vector to be fed to the `forecast()` call
         forecast_start = self._t_fit[-1]
-        forecast_end = forecast_start + span
+        forecast_end = forecast_start + span_float
         t_forecast = np.arange(
+            forecast_start + time_step_float,
+            forecast_end + time_step_float,
+            time_step_float,
+        )
+
+        # generate the time vector representing true time of the forecast
+        forecast_start = self._time_fit[-1]
+        forecast_end = (
+            (forecast_start + span_td)
+            if self._is_datetime
+            else (forecast_start + span_float)
+        )
+        time_step = time_step_td if self._is_datetime else time_step_float
+        time_forecast = np.arange(
             forecast_start + time_step,
             forecast_end + time_step,
             time_step,
@@ -401,7 +443,7 @@ class OptDMD:
             bopdmd.fit_econ(
                 s,
                 v.data,
-                t_fit.astype("float64"),
+                t_fit,
             )
         except Exception as e:
             msg = "Error computing the DMD fit."
@@ -617,7 +659,7 @@ class OptDMD:
             logger.exception(msg)
             raise RuntimeError(msg) from e
 
-        estimated_size = self._estimate_array_size(t_forecast.astype("float64"))
+        estimated_size = self._estimate_array_size(t_forecast)
         msg = f"Estimated forecast size is {estimated_size/1e3:.3f} KB."
         logger.info(msg)
 
@@ -630,7 +672,7 @@ class OptDMD:
 
         logger.info("Computing the DMD forecast...")
         try:
-            forecast = self._predict(t_forecast.astype("float64"), use_dask)
+            forecast = self._predict(t_forecast, use_dask)
         except Exception as e:
             msg = "Error computing the DMD forecast."
             logger.exception(msg)
@@ -729,7 +771,7 @@ class OptDMD:
             logger.exception(msg)
             raise RuntimeError(msg) from e
 
-        estimated_size = self._estimate_array_size(t_reconstruct.astype("float64"))
+        estimated_size = self._estimate_array_size(t_reconstruct)
         msg = f"Estimated reconstruction size is {estimated_size/1e3:.3f} KB."
         logger.info(msg)
 
@@ -742,7 +784,7 @@ class OptDMD:
 
         logger.info("Computing the DMD reconstruction...")
         try:
-            reconstruction = self._predict(t_reconstruct.astype("float64"), use_dask)
+            reconstruction = self._predict(t_reconstruct, use_dask)
         except Exception as e:
             msg = "Error computing the DMD reconstruction."
             logger.exception(msg)

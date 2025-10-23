@@ -92,8 +92,8 @@ def test_fit_outputs(solver):
         "Expected 't_fit' to be of type 'np.ndarray', "
         f"but got {type(solver._t_fit)} instead."
     )
-    assert solver._t_fit.dtype.name == f"timedelta64[{solver._time_units}]", (
-        f"Expected 't_fit' vector to have data type timedelta64[{solver._time_units}], "
+    assert np.issubdtype(solver._t_fit.dtype, float), (
+        f"Expected 't_fit' vector to have data type float, "
         f"but got {solver._t_fit.dtype.name}."
     )
     assert solver.modes.shape == generator.u.shape, (
@@ -163,12 +163,12 @@ def test_generate_forecast_time_vector(forecast_span, dt):
         "Expected 'time_forecast' to be of type 'np.ndarray', "
         f"but got {type(time_forecast)} instead."
     )
-    assert np.unique(np.diff(t_forecast)) == np.timedelta64(1, "s"), (
+    assert np.unique(np.diff(t_forecast)) == 1, (
         "Expected the time difference between consecutive elements in "
         "'t_forecast' to be one second, but got "
         f"{np.unique(np.diff(t_forecast))} instead."
     )
-    assert np.unique(np.diff(time_forecast)) == np.timedelta64(1, "s"), (
+    assert np.unique(np.diff(time_forecast)) == 1, (
         "Expected the time difference between consecutive elements in "
         "'time_forecast' to be one second, but got "
         f"{np.unique(np.diff(time_forecast))} instead."
@@ -181,13 +181,13 @@ def test_generate_forecast_time_vector(forecast_span, dt):
         "Expected the length of 'time_forecast' to be 10, but got "
         f"{len(time_forecast)} instead."
     )
-    assert t_forecast[0] == optdmd._t_fit[-1] + np.timedelta64(1, "s"), (
+    assert t_forecast[0] == optdmd._t_fit[-1] + 1, (
         "Expected 't_forecast[0]' to be one second ahead"
-        f"of t_fit[-1], but got {t_forecast[0] - optdmd._t_fit[-1]} instead."
+        f"of t_fit[-1], but got {t_forecast[0] - optdmd._t_fit[-1]} seconds instead."
     )
-    assert time_forecast[0] == optdmd.time_fit[-1] + np.timedelta64(1, "s"), (
+    assert time_forecast[0] == optdmd.time_fit[-1] + 1, (
         "Expected 'time_forecast[0]' to be one second ahead of time_fit[-1], "
-        f"but got {time_forecast[0] - optdmd.time_fit[-1]} instead."
+        f"but got {time_forecast[0] - optdmd._time_fit[-1]} seconds instead."
     )
 
 
