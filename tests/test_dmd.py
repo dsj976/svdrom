@@ -11,17 +11,8 @@ from svdrom.dmd import OptDMD
 dask.config.set(scheduler="single-threaded")
 
 
-class TestOptDMDDataGenerator:
-    """Tests for the OptDMD class using a DataGenerator instance
-    to generate random input data.
-    """
-
-    @classmethod
-    def setup_class(cls):
-        cls.generator = DataGenerator(seed=1234)
-        cls.generator.generate_svd_results(n_components=10)
-        cls.optdmd = OptDMD()
-        cls.optdmd_bagging = OptDMD(num_trials=5, seed=1234)
+class BaseTestOptDMD:
+    """Base test class for OptDMD containing all generic test methods."""
 
     @pytest.mark.parametrize("solver", ["optdmd", "optdmd_bagging"])
     def test_basic(self, solver):
@@ -95,7 +86,9 @@ class TestOptDMDDataGenerator:
             solver.time_fit,
             self.generator.v.time.values,
             strict=True,
-            err_msg="Expected 'time_fit' vector to equal 'v.time.values'.",
+            err_msg=(
+                "Expected 'time_fit' vector to " "be strictly equal to 'v.time.values'."
+            ),
         )
         assert isinstance(solver._t_fit, np.ndarray), (
             "Expected 't_fit' to be of type 'np.ndarray', "
@@ -118,6 +111,7 @@ class TestOptDMDDataGenerator:
             f"but got {solver.amplitudes.shape} instead."
         )
         if solver.num_trials == 0:
+            # no bagging
             assert solver.modes_std is None, (
                 "Expected 'modes_std' to be None, "
                 f"but got {solver.modes_std} instead."
@@ -130,6 +124,7 @@ class TestOptDMDDataGenerator:
                 f"but got {solver.amplitudes_std} instead."
             )
         else:
+            # with bagging
             assert isinstance(solver.modes_std, xr.DataArray), (
                 "Expected 'modes_std' to be xr.DataArray, "
                 f"but got {solver.modes_std} instead."
@@ -158,6 +153,19 @@ class TestOptDMDDataGenerator:
         )
         assert dynamics.shape == (solver.n_modes, len(solver.time_fit))
         assert dynamics.dims == ("components", "time")
+
+
+class TestOptDMDDataGenerator(BaseTestOptDMD):
+    """Tests for the OptDMD class using a DataGenerator instance
+    to generate random input data.
+    """
+
+    @classmethod
+    def setup_class(cls):
+        cls.generator = DataGenerator(seed=1234)
+        cls.generator.generate_svd_results(n_components=10)
+        cls.optdmd = OptDMD()
+        cls.optdmd_bagging = OptDMD(num_trials=5, seed=1234)
 
     @pytest.mark.parametrize("forecast_span", ["10 s", 10])
     @pytest.mark.parametrize("dt", ["1 s", 10, None])
