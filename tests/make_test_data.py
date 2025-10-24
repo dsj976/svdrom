@@ -47,7 +47,9 @@ class DataGenerator:
         self.x = x if x else np.arange(0, 10)
         self.y = y if y else np.arange(0, 10)
         self.z = z if z else np.arange(0, 5)
-        self.t = t if t else np.arange(0, 20)
+        self.t = (
+            t if t else np.arange(0, 20, dtype="datetime64[s]").astype("datetime64[ns]")
+        )
         self.vars = vars if vars else ["U", "V", "W"]
         self.rng = np.random.default_rng(seed)
 
