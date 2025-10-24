@@ -238,7 +238,7 @@ class SignalGenerator:
         self.add_noise(noise_std=noise_std, random_seed=random_seed)
         return self
 
-    def compute_svd_results(
+    def generate_svd_results(
         self,
         n_components: int = -1,
         noise_std: float = 0.2,
