@@ -113,10 +113,10 @@ class DataGenerator:
 class SignalGenerator:
     def __init__(
         self,
-        nx=100,
-        nt=500,
-        x_min=0,
-        x_max=10,
+        nx=500,
+        nt=200,
+        x_min=-5,
+        x_max=5,
         t_min=0,
         t_max=50,
     ):
