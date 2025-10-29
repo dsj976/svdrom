@@ -172,7 +172,8 @@ class TestOptDMDRandomData(BaseTestOptDMD):
     @pytest.mark.parametrize("dt", ["1 s", 10, None])
     def test_generate_forecast_time_vector(self, forecast_span, dt):
         """Test the method to generate the forecast time vector."""
-        t_forecast, time_forecast = self.optdmd._generate_forecast_time_vector(
+        solver = self.optdmd
+        t_forecast, time_forecast = solver._generate_forecast_time_vector(
             forecast_span, dt
         )
         assert isinstance(t_forecast, np.ndarray), (
@@ -184,13 +185,13 @@ class TestOptDMDRandomData(BaseTestOptDMD):
             f"but got {type(time_forecast)} instead."
         )
         assert np.unique(np.diff(t_forecast)) == 1, (
-            "Expected the time difference between consecutive elements in "
-            "'t_forecast' to be one second, but got "
+            "Expected the difference between consecutive elements in "
+            f"'t_forecast' to be 1, but got "
             f"{np.unique(np.diff(t_forecast))} instead."
         )
         assert np.unique(np.diff(time_forecast)) == np.timedelta64(1, "s"), (
-            "Expected the time difference between consecutive elements in "
-            "'time_forecast' to be one second, but got "
+            "Expected the difference between consecutive elements in "
+            f"'time_forecast' to be {np.timedelta64(1, "s")}, but got "
             f"{np.unique(np.diff(time_forecast))} instead."
         )
         assert len(t_forecast) == 10, (
@@ -201,13 +202,14 @@ class TestOptDMDRandomData(BaseTestOptDMD):
             "Expected the length of 'time_forecast' to be 10, but got "
             f"{len(time_forecast)} instead."
         )
-        assert t_forecast[0] == self.optdmd._t_fit[-1] + 1, (
-            "Expected 't_forecast[0]' to be one second ahead of t_fit[-1], "
-            f"but got {t_forecast[0] - self.optdmd._t_fit[-1]} seconds instead."
+        assert t_forecast[0] == solver._t_fit[-1] + 1, (
+            "Expected 't_forecast[0]' to be ahead of t_fit[-1] by a value of 1, "
+            f"but got a value of {t_forecast[0] - solver._t_fit[-1]} instead."
         )
-        assert time_forecast[0] == self.optdmd.time_fit[-1] + np.timedelta64(1, "s"), (
-            "Expected 'time_forecast[0]' to be one second ahead of time_fit[-1], "
-            f"but got {time_forecast[0] - self.optdmd._time_fit[-1]} seconds instead."
+        assert time_forecast[0] == solver.time_fit[-1] + np.timedelta64(1, "s"), (
+            "Expected 'time_forecast[0]' to be ahead of time_fit[-1] by "
+            f"{np.timedelta64(1, "s")}"
+            f"but got {time_forecast[0] - solver._time_fit[-1]} instead."
         )
 
     @pytest.mark.parametrize("solver", ["optdmd", "optdmd_bagging"])
