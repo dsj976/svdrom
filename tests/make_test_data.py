@@ -114,8 +114,8 @@ class DataGenerator:
 class SignalGenerator:
     def __init__(
         self,
-        nx=500,
-        nt=200,
+        nx=501,
+        nt=201,
         x_min=-5,
         x_max=5,
         t_min=0,
@@ -127,13 +127,13 @@ class SignalGenerator:
         Parameters
         ----------
         nx : int
-            Number of spatial points. Default is 100.
+            Number of spatial points. Default is 501.
         nt : int
-            Number of temporal points. Default is 500.
+            Number of temporal points. Default is 201.
         x_min : float
-            Minimum spatial coordinate. Default is 0.
+            Minimum spatial coordinate. Default is -5.
         x_max : float
-            Maximum spatial coordinate. Default is 10.
+            Maximum spatial coordinate. Default is 5.
         t_min : float
             Minimum temporal coordinate. Default is 0.
         t_max : float
