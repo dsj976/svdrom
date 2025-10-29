@@ -3,7 +3,7 @@ import dask.array as da
 import numpy as np
 import pytest
 import xarray as xr
-from make_test_data import DataGenerator
+from make_test_data import DataGenerator, SignalGenerator
 
 from svdrom.dmd import OptDMD
 
@@ -58,7 +58,8 @@ class BaseTestOptDMD:
             self.generator.u,
             self.generator.s,
             self.generator.v,
-            varpro_opts_dict={"maxiter": 10},
+            varpro_opts_dict={"maxiter": 15},
+            eig_sort="imag",
         )
 
     @pytest.mark.parametrize("solver", ["optdmd", "optdmd_bagging"])
@@ -155,7 +156,7 @@ class BaseTestOptDMD:
         assert dynamics.dims == ("components", "time")
 
 
-class TestOptDMDDataGenerator(BaseTestOptDMD):
+class TestOptDMDRandomData(BaseTestOptDMD):
     """Tests for the OptDMD class using a DataGenerator instance
     to generate random input data.
     """
@@ -423,3 +424,43 @@ class TestOptDMDDataGenerator(BaseTestOptDMD):
                     assert array.shape == (solver._modes.shape[0], 5)
                 else:
                     assert array.shape == (solver._modes.shape[0], 1)
+
+
+class TestOptDMDCoherentSignal(BaseTestOptDMD):
+    """Tests for the OptDMD class using a SignalGenerator instance
+    to generate coherent spatio-temporal input data.
+    """
+
+    @classmethod
+    def setup_class(cls):
+        cls.generator = SignalGenerator()
+        cls.generator.generate_svd_results(random_seed=1234)
+        cls.optdmd = OptDMD(input_time_units="s")
+        cls.optdmd_bagging = OptDMD(
+            input_time_units="s", num_trials=10, trial_size=0.9, seed=1234
+        )
+
+    @pytest.mark.parametrize("solver", ["optdmd", "optdmd_bagging"])
+    def test_correct_eigs(self, solver):
+        """Test that OptDMD can find the correct frequencies of oscillation
+        in the data.
+        """
+        solver = getattr(self, solver)
+        omegas = np.sort(
+            [component["omega"] for component in self.generator.components],
+        )[::-1]  # get the temporal frequencies of oscillation from the data generator
+        eigs_imag = [
+            np.abs(eig.imag) for eig in solver.eigs
+        ]  # get the imaginary DMD eigenvalues
+        eigs_imag = np.unique(np.round(eigs_imag, decimals=2), sorted=True)[::-1]
+        np.testing.assert_array_almost_equal(
+            omegas,
+            eigs_imag,
+            decimal=2,
+            err_msg=(
+                f"The expected imaginary eigenvalues are: "
+                f"{np.round(omegas, decimals=2)}, "
+                "while the computed imaginary eigenvalues are: "
+                f"{np.round(eigs_imag, decimals=2)}."
+            ),
+        )
