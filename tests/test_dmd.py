@@ -395,11 +395,25 @@ class TestOptDMDRandomData(BaseTestOptDMD):
                 f"{expected_reconstruct_dims}, but got {reconstruction.dims} instead."
             )
             if isinstance(t, slice):
-                assert reconstruction.shape == (solver._modes.shape[0], 5)
+                assert reconstruction.shape == (solver._modes.shape[0], 5), (
+                    "Expected 'reconstruction' to have shape "
+                    f"{(solver._modes.shape[0], 5)}, "
+                    f"but got {reconstruction.shape} instead."
+                )
             else:
-                assert reconstruction.shape == (solver._modes.shape[0], 1)
+                assert reconstruction.shape == (solver._modes.shape[0], 1), (
+                    "Expected 'reconstruction' to have shape "
+                    f"{(solver._modes.shape[0], 1)}, "
+                    f"but got {reconstruction.shape} instead."
+                )
             np.testing.assert_array_equal(
-                reconstruction[solver.time_dimension].values, solver.time_fit[t]
+                reconstruction[solver.time_dimension].values,
+                solver.time_fit[t],
+                err_msg=(
+                    "Expected the reconstruction time vector to be: "
+                    f"{solver.time_fit[t]}, "
+                    f"but got {reconstruction[solver.time_dimension].values} instead."
+                ),
             )
         else:
             # with bagging
@@ -418,12 +432,26 @@ class TestOptDMDRandomData(BaseTestOptDMD):
                     f"{expected_reconstruct_dims}, but got {array.dims} instead."
                 )
                 np.testing.assert_array_equal(
-                    array[solver.time_dimension].values, solver.time_fit[t]
+                    array[solver.time_dimension].values,
+                    solver.time_fit[t],
+                    err_msg=(
+                        "Expected the reconstruction time vector to be: "
+                        f"{solver.time_fit[t]}, "
+                        f"but got {array[solver.time_dimension].values} instead."
+                    ),
                 )
                 if isinstance(t, slice):
-                    assert array.shape == (solver._modes.shape[0], 5)
+                    assert array.shape == (solver._modes.shape[0], 5), (
+                        "Expected 'reconstruction' to have shape "
+                        f"{(solver._modes.shape[0], 5)}, "
+                        f"but got {array.shape} instead."
+                    )
                 else:
-                    assert array.shape == (solver._modes.shape[0], 1)
+                    assert array.shape == (solver._modes.shape[0], 1), (
+                        "Expected 'reconstruction' to have shape "
+                        f"{(solver._modes.shape[0], 1)}, "
+                        f"but got {array.shape} instead."
+                    )
 
 
 class TestOptDMDCoherentSignal(BaseTestOptDMD):
