@@ -1,5 +1,6 @@
 import numpy as np
 import xarray as xr
+from numpy.lib.stride_tricks import sliding_window_view
 
 
 class DataGenerator:
@@ -121,7 +122,7 @@ class SignalGenerator:
         t_max=50,
     ):
         """A class to generate synthetic coherent spatio-temporal signals
-        for testing purposes.
+        for testing purposes, stored in a NumPy-backed Xarray DataArray.
 
         Parameters
         ----------
@@ -155,7 +156,7 @@ class SignalGenerator:
     def add_sinusoid1(
         self, a: float = 1, k: float = 0.1, omega: float = 1, gamma: float = 0
     ) -> "SignalGenerator":
-        """Generate a sinusoidal signal of the form:
+        """Add a sinusoidal signal of the form:
         a*sin(k*x - omega*t)*exp(gamma*t)
 
         Parameters
@@ -187,7 +188,7 @@ class SignalGenerator:
     def add_sinusoid2(
         self, a: float = 1, k: float = 0.2, omega: float = 1, c: float = 0
     ) -> "SignalGenerator":
-        """Generate a sinusoidal signal of the form:
+        """Add a sinusoidal signal of the form:
         a*(exp(-k*(x+c)^2)*cos(omega*t)
 
         Parameters
@@ -228,6 +229,32 @@ class SignalGenerator:
         self.da = self.da.copy(data=self.da.values + noise)
         return self
 
+    def _apply_delay_embedding(self, delay: int = 2) -> "SignalGenerator":
+        """Apply delay embedding to the matrix of snapshots.
+        For an input matrix of shape (n_samples, n_snapshots),
+        delay embedding results in a matrix of shape
+        (n_samples * d, n_snapshots - d + 1). Delay embedding can help
+        DMD more accurately capture the modes in the data by lifting
+        the data into a higher-dimensional space that mixes spatial
+        and temporal structures.
+        """
+        X = self.da.transpose("x", "time").values
+        X = (
+            sliding_window_view(X.T, (delay, X.shape[0]))[:, 0]
+            .reshape(X.shape[1] - delay + 1, -1)
+            .T
+        )
+        data = {}
+        data["coords"] = {
+            "x": {"dims": ("x"), "data": np.tile(self.x, delay)},
+            "time": {"dims": ("time"), "data": self.t[: -delay + 1]},
+        }
+        data["dims"] = ("x", "time")
+        data["data"] = X
+        data["name"] = "signal"
+        self.da = xr.DataArray.from_dict(data)
+        return self
+
     def _generate_signal(
         self, noise_std: float = 0.2, random_seed: int | None = None
     ) -> "SignalGenerator":
@@ -242,19 +269,36 @@ class SignalGenerator:
 
     def generate_svd_results(
         self,
-        n_components: int = -1,
+        n_components: int = 6,
         noise_std: float = 0.2,
         random_seed: int | None = None,
+        apply_delay_embedding: bool = True,
     ) -> "SignalGenerator":
         """Compute the U, S and V matrices resulting from the SVD
         of the signal. If no signal has been computed, a predefined
-        signal consisting of three sinusoids and white noise is
-        generated. You can control the white noise generation with
-        noise_std and random_seed (set to an integer for reproducibility).
-        If n_components is -1 (the default), all SVD components are returned.
+        signal consisting of 3 sinusoids and white noise is
+        generated prior to computing the SVD.
+
+        Parameters
+        ----------
+        n_components: int
+            Number of SVD components to retain. The default is 6, given
+            3 sinusoids are generated in the absence of a pre-computed
+            signal. Set to -1 to keep all SVD components.
+        noise_std: float
+            Standard deviation of the Gaussian noise to be added to the
+            signal prior to SVD computation. The default is 0.2.
+        random_seed: int | None
+            Seed for the random number generator. Set to an integer for
+            reproducibility.
+        apply_delay_embedding: bool
+            Whether to apply time-delay embedding with a value od d=2
+            (i.e. with one time lag). The default is True.
         """
         if not self.components:
             self._generate_signal(noise_std=noise_std, random_seed=random_seed)
+        if apply_delay_embedding:
+            self._apply_delay_embedding()
         n_components = (
             min(len(self.x), len(self.t)) if n_components == -1 else n_components
         )
