@@ -40,8 +40,13 @@ class OptDMD:
         time_dimension: str
             Name of the time dimension in the input data. Default is "time".
         time_units: str
-            Units in which to treat the time dimension. Default is "s".
+            Units in which you wish to treat the time dimension. Default is "s".
             Must be one of {"s", "h"}, where "s" is seconds and "h" is hours.
+        input_time_units: str | None
+            Units of the time vector of the input data. Default is None, which
+            means same as "time_units". If you provide a string, it must be one
+            of {"s", "h"}. Only used if the time vector of the input data consists
+            of floats instead of datetimes, and hence the units cannot be inferred.
         num_trials: int
             Number of bagging trials to perform during the OptDMD fit.
             Default is 0 (no bagging).
@@ -172,6 +177,11 @@ class OptDMD:
     def time_units(self) -> str:
         """The time units to use in the DMD fit and forecast (read-only)."""
         return self._time_units
+
+    @property
+    def input_time_units(self) -> str | None:
+        """The units of the time vector of the input data (read-only)."""
+        return self._input_time_units
 
     @property
     def solver(self) -> BOPDMD | None:
