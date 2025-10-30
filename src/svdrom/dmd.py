@@ -252,7 +252,21 @@ class OptDMD:
         self, v: xr.DataArray
     ) -> tuple[np.ndarray, np.ndarray]:
         """Given the right singular vectors containing the temporal
-        information, generate the time vector for the DMD fit.
+        information, generate the time vector(s) for the DMD fit.
+
+        Parameters
+        ----------
+        v: xr.DataArray
+            The right singular vectors containing the temporal information.
+
+        Returns
+        -------
+        t_fit: np.ndarray[float]
+            Vector to be fed to the DMD fit call.
+        time_fit: np.ndarray[float] | np.ndarray[np.timedelta64]
+            Vector representing the true time of the fitted data,
+            which may consist of floats or timedeltas, depending
+            on the input data.
         """
         time_fit = v[self._time_dimension].values
         time_deltas = np.diff(time_fit)
@@ -300,10 +314,12 @@ class OptDMD:
 
         Returns
         -------
-        t_forecast: np.ndarray
+        t_forecast: np.ndarray[float]
             The time vector to be fed to the `forecast()` call.
-        time_forecast: np.ndarray
-            The time vector representing the true time of the forecast.
+        time_forecast: np.ndarray[float] | np.ndarray[np.timedelta64]
+            The time vector representing the true time of the forecast,
+            which may consist of floats or timedeltas, depending on the
+            input data.
         """
         if self._t_fit is None or self._time_fit is None:
             msg = "The DMD fit time vector is not initialized."
@@ -392,7 +408,7 @@ class OptDMD:
 
     def _extract_results(
         self, bopdmd: BOPDMD, u: xr.DataArray, v: xr.DataArray
-    ) -> None:
+    ) -> "OptDMD":
         """Given the fitted BOPDMD instance, the left singular vectors
         containing the spatial information, and the right singular vectors
         containing the temporal information, store them in the instance attributes."""
@@ -415,10 +431,17 @@ class OptDMD:
             self._eigs_std = bopdmd.eigenvalues_std
             self._amplitudes_std = bopdmd.amplitudes_std
 
+        return self
+
     def fit(
         self, u: xr.DataArray, s: np.ndarray, v: xr.DataArray, **kwargs
     ) -> "OptDMD":
-        """Fit a OptDMD model to the results of a Singular Value Decomposition (SVD).
+        """Fit the OptDMD model to the results of a Singular Value Decomposition (SVD).
+        If you have requested bagging when instantiating the model, "num_trials" OptDMD
+        trials will be fitted by randomly subsampling snapshots of the data, and the
+        trials will be ensemble averaged. If you have requested to perform bagging in
+        parallel and you have a Dask multi-processing or distributed scheduler running,
+        bagging will be performed in parallel.
 
         Parameters
         ----------
@@ -484,11 +507,31 @@ class OptDMD:
         | tuple[np.ndarray, np.ndarray],
         time_prediction: np.ndarray,
     ) -> xr.DataArray | tuple[xr.DataArray, xr.DataArray]:
-        """Convert the DMD prediction (i.e. a forecast or a reconstruction)
-        into formatted xarray.DataArray(s). The prediction may be a single
-        array (deterministic) or a tuple of two arrays (ensemble mean and
-        variance). The second argument is the time vector representing the
-        true prediction time."""
+        """Convert the DMD prediction (i.e. a forecast or a reconstruction),
+        deterministic or probabilistic, into formatted xarray.DataArray(s).
+
+        Parameters
+        ----------
+        prediction: (
+            np.ndarray | da.Array
+            | tuple[np.ndarray, np.ndarray]
+            | tuple[da.Array, da.Array]
+        )
+            A DMD forecast or reconstruction, deterministic (single array) or
+            probabilistic (two arrays - ensemble mean and variance). The arrays can be
+            NumPy or Dask arrays.
+        time_prediction: np.ndarray[float] | np.ndarray[np.timedelta64]
+            The time vector representing the true prediction time.
+
+        Returns
+        -------
+        xr.DataArray | tuple[xr.DataArray, xr.DataArray]
+            The forecast or reconstruction formatted as xr.DataArray(s).
+            If two arrays are passed for a probabilistic prediction, two
+            DataArrays are returned, the first corresponding to the mean
+            and the second to the variance. The DataArrays are NumPy- or
+            Dask-backed, depending on the input arrays.
+        """
         if self._modes is None:
             msg = "The DMD modes have not been computed."
             raise RuntimeError(msg)
