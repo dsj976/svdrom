@@ -343,6 +343,18 @@ class OptDMD:
             time_step_float = span_float / dt
         time_step_td = time_step_float.astype(f"timedelta64[{self._time_units}]")
 
+        if (
+            self._is_datetime
+            and time_step_td / np.timedelta64(1, self._time_units) == 0
+        ):
+            msg = (
+                f"The calculated forecast time step is not valid: {time_step_td}. "
+                "Ensure the requested forecast time step is larger than the time step "
+                "of the fitted data."
+            )
+            logger.exception(msg)
+            raise RuntimeError(msg)
+
         # generate the time vector to be fed to the `forecast()` call
         forecast_start = self._t_fit[-1]
         forecast_end = forecast_start + span_float
