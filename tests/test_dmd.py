@@ -515,7 +515,7 @@ class TestOptDMDCoherentSignal(BaseTestOptDMD):
         eigs_imag = [
             np.abs(eig.imag) for eig in solver.eigs
         ]  # get the imaginary DMD eigenvalues
-        eigs_imag = np.unique(np.round(eigs_imag, decimals=2), sorted=True)[::-1]
+        eigs_imag = np.sort(np.unique(np.round(eigs_imag, decimals=2)))[::-1]
         np.testing.assert_array_almost_equal(
             omegas,
             eigs_imag,
