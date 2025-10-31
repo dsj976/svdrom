@@ -49,6 +49,12 @@ class BaseTestOptDMD:
         assert hasattr(
             solver, "dynamics"
         ), "OptDMD object is missing the 'dynamics' attribute."
+        assert hasattr(
+            solver, "time_units"
+        ), "OptDMD object is missing the 'time_units' attribute."
+        assert hasattr(
+            solver, "input_time_units"
+        ), "OptDMD object is missing the 'input_time_units' attribute."
 
     @pytest.mark.parametrize("solver", ["optdmd", "optdmd_bagging"])
     def test_fit_basic(self, solver):
@@ -470,7 +476,8 @@ class BaseTestOptDMD:
 
 class TestOptDMDRandomData(BaseTestOptDMD):
     """Tests for the OptDMD class using a DataGenerator instance
-    to generate random input data.
+    to generate random input data, with a time vector containing
+    datetimes.
     """
 
     @classmethod
@@ -483,7 +490,8 @@ class TestOptDMDRandomData(BaseTestOptDMD):
 
 class TestOptDMDCoherentSignal(BaseTestOptDMD):
     """Tests for the OptDMD class using a SignalGenerator instance
-    to generate coherent spatio-temporal input data.
+    to generate coherent spatio-temporal input data, with a time
+    vector containing floats.
     """
 
     @classmethod
