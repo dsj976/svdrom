@@ -225,19 +225,6 @@ class BaseTestOptDMD:
                 f"but got {time_forecast[0] - solver._time_fit[-1]} instead."
             )
 
-
-class TestOptDMDRandomData(BaseTestOptDMD):
-    """Tests for the OptDMD class using a DataGenerator instance
-    to generate random input data.
-    """
-
-    @classmethod
-    def setup_class(cls):
-        cls.generator = DataGenerator(seed=1234)
-        cls.generator.generate_svd_results(n_components=10)
-        cls.optdmd = OptDMD()
-        cls.optdmd_bagging = OptDMD(num_trials=5, seed=1234)
-
     @pytest.mark.parametrize("solver", ["optdmd", "optdmd_bagging"])
     def test_predict(self, solver):
         """Test the private predict() method, ensuring it returns the
@@ -248,7 +235,6 @@ class TestOptDMDRandomData(BaseTestOptDMD):
             forecast_span="20 s",
             dt="2 s",
         )
-        t = t.astype("float64")
         if solver.num_trials == 0:
             # without bagging
 
@@ -480,6 +466,19 @@ class TestOptDMDRandomData(BaseTestOptDMD):
                         f"{(solver._modes.shape[0], 1)}, "
                         f"but got {array.shape} instead."
                     )
+
+
+class TestOptDMDRandomData(BaseTestOptDMD):
+    """Tests for the OptDMD class using a DataGenerator instance
+    to generate random input data.
+    """
+
+    @classmethod
+    def setup_class(cls):
+        cls.generator = DataGenerator(seed=1234)
+        cls.generator.generate_svd_results(n_components=10)
+        cls.optdmd = OptDMD()
+        cls.optdmd_bagging = OptDMD(num_trials=5, seed=1234)
 
 
 class TestOptDMDCoherentSignal(BaseTestOptDMD):
