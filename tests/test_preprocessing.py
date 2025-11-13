@@ -1,15 +1,23 @@
+import numpy as np
 import pytest
 import xarray as xr
-from make_test_data import DataGenerator
+from make_test_data import DataGenerator, SignalGenerator
 
-from svdrom.preprocessing import StandardScaler, variable_spatial_stack
+from svdrom.preprocessing import (
+    StandardScaler,
+    hankel_preprocessing,
+    variable_spatial_stack,
+)
 
-generator = DataGenerator()
-generator.generate_dataarray()
-generator.generate_dataset()
+data_generator = DataGenerator()
+data_generator.generate_dataarray()
+data_generator.generate_dataset()
+
+signal_generator = SignalGenerator()
+signal_generator.add_sinusoid1()
 
 
-@pytest.mark.parametrize("X", [generator.da, generator.ds])
+@pytest.mark.parametrize("X", [data_generator.da, data_generator.ds])
 def test_variable_spatial_stack(X: xr.DataArray | xr.Dataset):
     """Test for the variable_spatial_stack function."""
     # check that the output is a xarray DataArray
@@ -52,7 +60,7 @@ def test_variable_spatial_stack(X: xr.DataArray | xr.Dataset):
         xr.testing.assert_allclose(X, X_unstacked, check_dim_order=False)
 
 
-@pytest.mark.parametrize("X", [generator.da, generator.ds])
+@pytest.mark.parametrize("X", [data_generator.da, data_generator.ds])
 def test_standard_scaler(X: xr.DataArray | xr.Dataset):
     """Test for the StandardScaler class."""
     scaler = StandardScaler()
@@ -90,3 +98,47 @@ def test_standard_scaler(X: xr.DataArray | xr.Dataset):
             xr.testing.assert_allclose(X, X_scaled * scaler.std + scaler.mean)
         else:
             xr.testing.assert_allclose(X, X_scaled + scaler.mean)
+
+
+@pytest.mark.parametrize("generator", [data_generator, signal_generator])
+@pytest.mark.parametrize("d", [2, 3])
+def test_hankel_preprocessing(generator: DataGenerator | SignalGenerator, d: int):
+    """Test for the hankel_preprocessing function."""
+    if isinstance(generator, DataGenerator):
+        X = generator.da.chunk("auto")  # convert to Dask-backed DataArray
+        # stack into single spatial dimension, called "samples"
+        X = variable_spatial_stack(X, dims=("x", "y", "z"))
+    elif isinstance(generator, SignalGenerator):
+        X = generator.da.rename({"x": "samples"})
+    else:
+        raise ValueError
+
+    X = X.transpose("samples", "time")
+    n_samples, n_snapshots = X.shape
+    X_delayed = hankel_preprocessing(X, d=d)
+
+    assert (
+        X_delayed.dims == X.dims
+    ), f"Expected dimensions are {X.dims}, but got {X_delayed.dims}."
+
+    expected_coords = list(X.coords)
+    expected_coords.append("delay")
+    actual_coords = list(X_delayed.coords)
+    expected_coords, actual_coords = sorted(expected_coords), sorted(actual_coords)
+    assert (
+        actual_coords == expected_coords
+    ), f"Expected coordinates are {expected_coords}, but got {actual_coords}."
+
+    expected_shape = (d * n_samples, n_snapshots - d + 1)
+    assert (
+        X_delayed.shape == expected_shape
+    ), f"Expected shape is {expected_shape}, but got {X_delayed.shape}."
+
+    np.testing.assert_array_equal(
+        X_delayed[(d - 1) * n_samples :, 0].compute().data,
+        X_delayed[:n_samples, d - 1].compute().data,
+        err_msg=(
+            "After Hankel pre-processing, expected "
+            f"X[{(d-1) * n_samples}:, 0] to equal X[:{n_samples}, {d-1}]."
+        ),
+    )
