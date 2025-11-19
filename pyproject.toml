@@ -40,8 +40,9 @@ dev = [
   "pytest-cov >=3",
   "pre-commit",
 ]
-geospatial = [
-  "cartopy >= 0.24.1"
+extras = [
+  "cartopy >= 0.24.1",
+  "gcsfs",
 ]
 
 [project.urls]
