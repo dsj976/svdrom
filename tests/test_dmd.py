@@ -1,0 +1,529 @@
+import dask
+import dask.array as da
+import numpy as np
+import pytest
+import xarray as xr
+from make_test_data import DataGenerator, SignalGenerator
+
+from svdrom.dmd import OptDMD
+
+# set the dask scheduler to single-threaded
+dask.config.set(scheduler="single-threaded")
+
+
+class BaseTestOptDMD:
+    """Base test class for OptDMD containing all generic test methods."""
+
+    @pytest.mark.parametrize("solver", ["optdmd", "optdmd_bagging"])
+    def test_basic(self, solver):
+        """Basic test to check attributes of the OptDMD class."""
+        solver = getattr(self, solver)
+        assert hasattr(
+            solver, "modes"
+        ), "OptDMD object is missing the 'modes' attribute."
+        assert hasattr(solver, "eigs"), "OptDMD object is missing the 'eigs' attribute."
+        assert hasattr(
+            solver, "amplitudes"
+        ), "OptDMD object is missing the 'amplitudes' attribute."
+        assert hasattr(
+            solver, "modes_std"
+        ), "OptDMD object is missing the 'modes_std' attribute."
+        assert hasattr(
+            solver, "eigs_std"
+        ), "OptDMD object is missing the 'eigs_std' attribute."
+        assert hasattr(
+            solver, "amplitudes_std"
+        ), "OptDMD object is missing the 'amplitudes_std' attribute."
+        assert hasattr(
+            solver, "time_fit"
+        ), "OptDMD object is missing the 'time_fit' attribute."
+        assert hasattr(
+            solver, "num_trials"
+        ), "OptDMD object is missing the 'num_trials' attribute."
+        assert hasattr(
+            solver, "trial_size"
+        ), "OptDMD object is missing the 'trial_size' attribute."
+        assert hasattr(
+            solver, "parallel_bagging"
+        ), "OptDMD object is missing the 'parallel_bagging' attribute."
+        assert hasattr(
+            solver, "dynamics"
+        ), "OptDMD object is missing the 'dynamics' attribute."
+        assert hasattr(
+            solver, "time_units"
+        ), "OptDMD object is missing the 'time_units' attribute."
+        assert hasattr(
+            solver, "input_time_units"
+        ), "OptDMD object is missing the 'input_time_units' attribute."
+
+    @pytest.mark.parametrize("solver", ["optdmd", "optdmd_bagging"])
+    def test_fit_basic(self, solver):
+        """Test the fit() method of the OptDMD class."""
+        solver = getattr(self, solver)
+        solver.fit(
+            self.generator.u,
+            self.generator.s,
+            self.generator.v,
+            varpro_opts_dict={"maxiter": 15},
+            eig_sort="imag",
+        )
+
+    @pytest.mark.parametrize("solver", ["optdmd", "optdmd_bagging"])
+    def test_fit_outputs(self, solver):
+        """Test data types and shapes of attributes after
+        calling the fit() method."""
+        solver = getattr(self, solver)
+        assert isinstance(solver.modes, xr.DataArray), (
+            "Expected 'modes' to be of type 'xr.DataArray', "
+            f"but got {type(solver.modes)} instead."
+        )
+        assert isinstance(solver.eigs, np.ndarray), (
+            "Expected 'eigs' to be of type 'np.ndarray', "
+            f"but got {type(solver.eigs)} instead."
+        )
+        assert isinstance(solver.amplitudes, np.ndarray), (
+            "Expected 'amplitudes' to be of type 'np.ndarray', "
+            f"but got {type(solver.amplitudes)} instead."
+        )
+        assert isinstance(solver.time_fit, np.ndarray), (
+            "Expected 'time_fit' to be of type 'np.ndarray', "
+            f"but got {type(solver.time_fit)} instead."
+        )
+        np.testing.assert_equal(
+            solver.time_fit,
+            self.generator.v.time.values,
+            strict=True,
+            err_msg=(
+                "Expected 'time_fit' vector to " "be strictly equal to 'v.time.values'."
+            ),
+        )
+        assert isinstance(solver._t_fit, np.ndarray), (
+            "Expected 't_fit' to be of type 'np.ndarray', "
+            f"but got {type(solver._t_fit)} instead."
+        )
+        assert np.issubdtype(solver._t_fit.dtype, float), (
+            f"Expected 't_fit' vector to have data type float, "
+            f"but got {solver._t_fit.dtype.name}."
+        )
+        assert solver.modes.shape == self.generator.u.shape, (
+            f"Expected 'modes.shape' to be {self.generator.u.shape}, "
+            f"but got {solver.modes.shape} instead."
+        )
+        assert solver.eigs.shape == (solver.modes.shape[1],), (
+            f"Expected 'eigs.shape' to be {(solver.modes.shape[1],)}, "
+            f"but got {solver.eigs.shape} instead."
+        )
+        assert solver.amplitudes.shape == (solver.modes.shape[1],), (
+            f"Expected 'amplitudes.shape' to be {(solver.modes.shape[1],)}, "
+            f"but got {solver.amplitudes.shape} instead."
+        )
+        if solver.num_trials == 0:
+            # no bagging
+            assert solver.modes_std is None, (
+                "Expected 'modes_std' to be None, "
+                f"but got {solver.modes_std} instead."
+            )
+            assert solver.eigs_std is None, (
+                "Expected 'eigs_std' to be None, " f"but got {solver.eigs_std} instead."
+            )
+            assert solver.amplitudes_std is None, (
+                "Expected 'amplitudes_std' to be None, "
+                f"but got {solver.amplitudes_std} instead."
+            )
+        else:
+            # with bagging
+            assert isinstance(solver.modes_std, xr.DataArray), (
+                "Expected 'modes_std' to be xr.DataArray, "
+                f"but got {solver.modes_std} instead."
+            )
+            assert isinstance(solver.eigs_std, np.ndarray), (
+                "Expected 'eigs_std' to be np.ndarray, "
+                f"but got {solver.eigs_std} instead."
+            )
+            assert isinstance(solver.amplitudes_std, np.ndarray), (
+                "Expected 'amplitudes_std' to be np.ndarray, "
+                f"but got {solver.amplitudes_std} instead."
+            )
+
+    @pytest.mark.parametrize("solver", ["optdmd", "optdmd_bagging"])
+    def test_dynamics_attr(self, solver):
+        """Test the dynamics attribute."""
+        solver = getattr(self, solver)
+        dynamics = solver.dynamics
+        assert isinstance(dynamics, xr.DataArray), (
+            "Expected 'dynamics' to be of type 'xr.DataArray', "
+            f"but got {type(dynamics)} instead."
+        )
+        assert isinstance(dynamics.data, np.ndarray), (
+            "Expected the 'dynamics' DataArray to be backed by a "
+            f"np.ndarray, but got a {type(dynamics.data)} instead."
+        )
+        assert dynamics.shape == (solver.n_modes, len(solver.time_fit))
+        assert dynamics.dims == ("components", "time")
+
+    @pytest.mark.parametrize("forecast_span", ["20 s", 20])
+    @pytest.mark.parametrize("dt", ["2 s", 10, None])
+    def test_generate_forecast_time_vector(self, forecast_span, dt):
+        """Test the method to generate the forecast time vector
+        with different inputs for the forecast span and forecast
+        time step.
+        """
+        solver = self.optdmd
+        if dt is not None:
+            expected_delta_t = 2
+            expected_delta_time = np.timedelta64(2, "s")
+            expected_len = 10
+        else:
+            expected_delta_time = np.mean(np.diff(solver._time_fit))
+            expected_delta_t = np.mean(np.diff(solver._t_fit))
+            expected_len = 20 / expected_delta_t
+        t_forecast, time_forecast = solver._generate_forecast_time_vector(
+            forecast_span, dt
+        )
+        assert isinstance(t_forecast, np.ndarray), (
+            "Expected 't_forecast' to be of type 'np.ndarray', "
+            f"but got {type(t_forecast)} instead."
+        )
+        assert isinstance(time_forecast, np.ndarray), (
+            "Expected 'time_forecast' to be of type 'np.ndarray', "
+            f"but got {type(time_forecast)} instead."
+        )
+        assert np.unique(np.diff(t_forecast)) == expected_delta_t, (
+            "Expected the difference between consecutive elements in "
+            f"'t_forecast' to be {expected_delta_t}, but got "
+            f"{np.unique(np.diff(t_forecast))} instead."
+        )
+        if np.issubdtype(self.generator.t.dtype, float):
+            assert np.unique(np.diff(time_forecast)) == expected_delta_t, (
+                "Expected the difference between consecutive elements in "
+                f"'time_forecast' to be {expected_delta_t}, but got "
+                f"{np.unique(np.diff(time_forecast))} instead."
+            )
+        else:
+            assert np.unique(np.diff(time_forecast)) == expected_delta_time, (
+                "Expected the difference between consecutive elements in "
+                f"'time_forecast' to be {expected_delta_time}, but got "
+                f"{np.unique(np.diff(time_forecast))} instead."
+            )
+        assert len(t_forecast) == expected_len, (
+            f"Expected the length of 't_forecast' to be {expected_len}, but got "
+            f"{len(t_forecast)} instead."
+        )
+        assert len(time_forecast) == expected_len, (
+            f"Expected the length of 'time_forecast' to be {expected_len}, but got "
+            f"{len(time_forecast)} instead."
+        )
+        assert t_forecast[0] == solver._t_fit[-1] + expected_delta_t, (
+            "Expected 't_forecast[0]' to be ahead of t_fit[-1] "
+            f"by a value of {expected_delta_t},"
+            f"but got a value of {t_forecast[0] - solver._t_fit[-1]} instead."
+        )
+        if np.issubdtype(self.generator.t.dtype, float):
+            assert time_forecast[0] == solver.time_fit[-1] + expected_delta_t, (
+                "Expected 'time_forecast[0]' to be ahead of time_fit[-1] "
+                f"by a value of {expected_delta_t}"
+                f"but got {time_forecast[0] - solver._time_fit[-1]} instead."
+            )
+        else:
+            assert time_forecast[0] == solver.time_fit[-1] + expected_delta_time, (
+                "Expected 'time_forecast[0]' to be ahead of time_fit[-1] "
+                f"by a value of {expected_delta_time}"
+                f"but got {time_forecast[0] - solver._time_fit[-1]} instead."
+            )
+
+    @pytest.mark.parametrize("solver", ["optdmd", "optdmd_bagging"])
+    def test_predict(self, solver):
+        """Test the private predict() method, ensuring it returns the
+        same output as BOPDMD.forecast() from PyDMD.
+        """
+        solver = getattr(self, solver)
+        t, _ = solver._generate_forecast_time_vector(
+            forecast_span="20 s",
+            dt="2 s",
+        )
+        if solver.num_trials == 0:
+            # without bagging
+
+            # no Dask
+            forecast_np = solver._predict(t, use_dask=False)
+            forecast_np_pydmd = solver.solver.forecast(t)
+            assert isinstance(forecast_np, np.ndarray), (
+                "Expected the forecast to be a np.ndarray, "
+                f"but got {type(forecast_np)} instead."
+            )
+            np.testing.assert_allclose(
+                forecast_np.real,
+                forecast_np_pydmd.real,
+                err_msg="Expected the forecast to match the output of PyDMD.",
+            )
+
+            # with Dask
+            forecast_da = solver._predict(t, use_dask=True)
+            assert isinstance(forecast_da, da.Array), (
+                "Expected the forecast to be a da.Array, "
+                f"but got {type(forecast_da)} instead."
+            )
+            forecast_np = forecast_da.compute()
+            np.testing.assert_allclose(
+                forecast_np.real,
+                forecast_np_pydmd.real,
+                err_msg="Expected the forecast to match the output of PyDMD.",
+            )
+        else:
+            # with bagging
+
+            # no Dask
+            forecast_np, forecast_var_np = solver._predict(t, use_dask=False)
+            forecast_np_pydmd, forecast_var_np_pydmd = solver.solver.forecast(t)
+            assert isinstance(forecast_np, np.ndarray), (
+                "Expected the mean forecast to be a np.ndarray, "
+                f"but got {type(forecast_np)} instead."
+            )
+            assert isinstance(forecast_var_np, np.ndarray), (
+                "Expected the forecast variance to be a np.ndarray, "
+                f"but got {type(forecast_var_np)} instead."
+            )
+            np.testing.assert_allclose(
+                forecast_np.real,
+                forecast_np_pydmd.real,
+                err_msg="Expected the mean forecast to match the output of PyDMD.",
+            )
+            np.testing.assert_allclose(
+                forecast_var_np.real,
+                forecast_var_np_pydmd.real,
+                err_msg="Expected the forecast variance to match the output of PyDMD.",
+            )
+
+            # with Dask
+            forecast_da, forecast_var_da = solver._predict(t, use_dask=True)
+            assert isinstance(forecast_da, da.Array), (
+                "Expected the mean forecast to be a da.Array, "
+                f"but got {type(forecast_da)} instead."
+            )
+            assert isinstance(forecast_var_da, da.Array), (
+                "Expected the forecast variance to be a da.Array, "
+                f"but got {type(forecast_var_da)} instead."
+            )
+            forecast_np, forecast_var_np = (
+                forecast_da.compute(),
+                forecast_var_da.compute(),
+            )
+            np.testing.assert_allclose(
+                forecast_np.real,
+                forecast_np_pydmd.real,
+                err_msg="Expected the mean forecast to match the output of PyDMD.",
+            )
+            np.testing.assert_allclose(
+                forecast_var_np.real,
+                forecast_var_np_pydmd.real,
+                err_msg="Expected the forecast variance to match the output of PyDMD.",
+            )
+
+    @pytest.mark.parametrize("solver", ["optdmd", "optdmd_bagging"])
+    def test_forecast(self, solver):
+        """Test for the forecast() method."""
+        solver = getattr(self, solver)
+        forecast_span, dt = "10 s", "1 s"
+        expected_forecast_shape = (self.generator.u.shape[0], 10)
+        expected_forecast_dims = (self.generator.u.dims[0], solver.time_dimension)
+        _, expected_forecast_t_vector = solver._generate_forecast_time_vector(
+            forecast_span=forecast_span,
+            dt=dt,
+        )
+        if solver.num_trials == 0:
+            # no bagging
+            forecast = solver.forecast(forecast_span=forecast_span, dt=dt)
+            assert isinstance(forecast, xr.DataArray), (
+                "Expected 'forecast' to be of type 'xr.DataArray', "
+                f"but got {type(forecast)} instead."
+            )
+            assert forecast.dims == expected_forecast_dims, (
+                f"Expected 'forecast' to have dimensions {expected_forecast_dims}, "
+                f"but got {forecast.dims} instead."
+            )
+            assert forecast.shape == expected_forecast_shape, (
+                f"Expected 'forecast' to have shape {expected_forecast_shape}, "
+                f"but got {forecast.shape}."
+            )
+            np.testing.assert_equal(
+                forecast.time.values,
+                expected_forecast_t_vector,
+                err_msg=(
+                    f"Expected the forecast time vector to be "
+                    f"{expected_forecast_t_vector}, but got {forecast.time.values}."
+                ),
+            )
+        else:
+            # with bagging
+            forecast, forecast_var = solver.forecast(forecast_span=forecast_span, dt=dt)
+            assert isinstance(forecast, xr.DataArray), (
+                "Expected 'forecast' to be of type 'xr.DataArray', "
+                f"but got {type(forecast)} instead."
+            )
+            assert forecast.dims == expected_forecast_dims, (
+                f"Expected 'forecast' to have dimensions {expected_forecast_dims}, "
+                f"but got {forecast.dims} instead."
+            )
+            assert forecast.shape == expected_forecast_shape, (
+                f"Expected 'forecast' to have shape {expected_forecast_shape}, "
+                f"but got {forecast.shape}."
+            )
+            np.testing.assert_equal(
+                forecast.time.values,
+                expected_forecast_t_vector,
+                err_msg=(
+                    f"Expected the forecast time vector to be "
+                    f"{expected_forecast_t_vector}, but got {forecast.time.values}."
+                ),
+            )
+            assert isinstance(forecast_var, xr.DataArray), (
+                "Expected 'forecast_var' to be of type 'xr.DataArray', "
+                f"but got {type(forecast)} instead."
+            )
+            assert forecast_var.dims == expected_forecast_dims, (
+                f"Expected 'forecast_var' to have dimensions {expected_forecast_dims}, "
+                f"but got {forecast.dims} instead."
+            )
+            assert forecast_var.shape == expected_forecast_shape, (
+                f"Expected 'forecast_var' to have shape {expected_forecast_shape}, "
+                f"but got {forecast.shape}."
+            )
+            np.testing.assert_equal(
+                forecast_var.time.values,
+                expected_forecast_t_vector,
+                err_msg=(
+                    "Expected the forecast variance time vector to be "
+                    f"{expected_forecast_t_vector}, but got {forecast.time.values}."
+                ),
+            )
+
+    @pytest.mark.parametrize("t", [slice(5), slice(5, 10), 10])
+    @pytest.mark.parametrize("solver", ["optdmd", "optdmd_bagging"])
+    def test_reconstruct(self, solver, t):
+        """Test for the reconstruct() method."""
+        solver = getattr(self, solver)
+        reconstruction = solver.reconstruct(t)
+        expected_reconstruct_dims = (self.generator.u.dims[0], solver.time_dimension)
+        if solver.num_trials == 0:
+            # no bagging
+            assert isinstance(reconstruction, xr.DataArray), (
+                "Expected 'reconstruction' to be of type 'xr.DataArray', "
+                f"but got {type(reconstruction)} instead."
+            )
+            assert reconstruction.dims == expected_reconstruct_dims, (
+                "Expected 'reconstruction' to have dimensions "
+                f"{expected_reconstruct_dims}, but got {reconstruction.dims} instead."
+            )
+            if isinstance(t, slice):
+                assert reconstruction.shape == (solver._modes.shape[0], 5), (
+                    "Expected 'reconstruction' to have shape "
+                    f"{(solver._modes.shape[0], 5)}, "
+                    f"but got {reconstruction.shape} instead."
+                )
+            else:
+                assert reconstruction.shape == (solver._modes.shape[0], 1), (
+                    "Expected 'reconstruction' to have shape "
+                    f"{(solver._modes.shape[0], 1)}, "
+                    f"but got {reconstruction.shape} instead."
+                )
+            np.testing.assert_array_equal(
+                reconstruction[solver.time_dimension].values,
+                solver.time_fit[t],
+                err_msg=(
+                    "Expected the reconstruction time vector to be: "
+                    f"{solver.time_fit[t]}, "
+                    f"but got {reconstruction[solver.time_dimension].values} instead."
+                ),
+            )
+        else:
+            # with bagging
+            reconstruction_mean, reconstruction_var = reconstruction
+            assert isinstance(reconstruction_mean, xr.DataArray), (
+                "Expected 'reconstruction_mean' to be of type 'xr.DataArray', "
+                f"but got {type(reconstruction_mean)} instead."
+            )
+            assert isinstance(reconstruction_var, xr.DataArray), (
+                "Expected 'reconstruction_var' to be of type 'xr.DataArray', "
+                f"but got {type(reconstruction_var)} instead."
+            )
+            for array in (reconstruction_mean, reconstruction_var):
+                assert array.dims == expected_reconstruct_dims, (
+                    "Expected 'reconstruction' to have dimensions "
+                    f"{expected_reconstruct_dims}, but got {array.dims} instead."
+                )
+                np.testing.assert_array_equal(
+                    array[solver.time_dimension].values,
+                    solver.time_fit[t],
+                    err_msg=(
+                        "Expected the reconstruction time vector to be: "
+                        f"{solver.time_fit[t]}, "
+                        f"but got {array[solver.time_dimension].values} instead."
+                    ),
+                )
+                if isinstance(t, slice):
+                    assert array.shape == (solver._modes.shape[0], 5), (
+                        "Expected 'reconstruction' to have shape "
+                        f"{(solver._modes.shape[0], 5)}, "
+                        f"but got {array.shape} instead."
+                    )
+                else:
+                    assert array.shape == (solver._modes.shape[0], 1), (
+                        "Expected 'reconstruction' to have shape "
+                        f"{(solver._modes.shape[0], 1)}, "
+                        f"but got {array.shape} instead."
+                    )
+
+
+class TestOptDMDRandomData(BaseTestOptDMD):
+    """Tests for the OptDMD class using a DataGenerator instance
+    to generate random input data, with a time vector containing
+    datetimes.
+    """
+
+    @classmethod
+    def setup_class(cls):
+        cls.generator = DataGenerator(seed=1234)
+        cls.generator.generate_svd_results(n_components=10)
+        cls.optdmd = OptDMD()
+        cls.optdmd_bagging = OptDMD(num_trials=5, seed=1234)
+
+
+class TestOptDMDCoherentSignal(BaseTestOptDMD):
+    """Tests for the OptDMD class using a SignalGenerator instance
+    to generate coherent spatio-temporal input data, with a time
+    vector containing floats.
+    """
+
+    @classmethod
+    def setup_class(cls):
+        cls.generator = SignalGenerator()
+        cls.generator.generate_svd_results(random_seed=1234)
+        cls.optdmd = OptDMD(input_time_units="s")
+        cls.optdmd_bagging = OptDMD(
+            input_time_units="s", num_trials=10, trial_size=0.9, seed=1234
+        )
+
+    @pytest.mark.parametrize("solver", ["optdmd", "optdmd_bagging"])
+    def test_correct_eigs(self, solver):
+        """Test that OptDMD can find the correct frequencies of oscillation
+        in the data.
+        """
+        solver = getattr(self, solver)
+        omegas = np.sort(
+            [component["omega"] for component in self.generator.components],
+        )[::-1]  # get the temporal frequencies of oscillation from the data generator
+        eigs_imag = [
+            np.abs(eig.imag) for eig in solver.eigs
+        ]  # get the imaginary DMD eigenvalues
+        eigs_imag = np.sort(np.unique(np.round(eigs_imag, decimals=2)))[::-1]
+        np.testing.assert_array_almost_equal(
+            omegas,
+            eigs_imag,
+            decimal=2,
+            err_msg=(
+                f"The expected imaginary eigenvalues are: "
+                f"{np.round(omegas, decimals=2)}, "
+                "while the computed imaginary eigenvalues are: "
+                f"{np.round(eigs_imag, decimals=2)}."
+            ),
+        )

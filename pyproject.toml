@@ -31,6 +31,7 @@ dependencies = [
   "zarr<=3.1.0",
   "dask[complete]",
   "xarray[complete]",
+  "pydmd @ git+https://github.com/ClimeTrend/PyDMD.git@parallel-bagging",
 ]
 
 [project.optional-dependencies]
@@ -39,8 +40,9 @@ dev = [
   "pytest-cov >=3",
   "pre-commit",
 ]
-geospatial = [
-  "cartopy >= 0.24.1"
+extras = [
+  "cartopy >= 0.24.1",
+  "gcsfs",
 ]
 
 [project.urls]
@@ -55,6 +57,7 @@ addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config"]
 xfail_strict = true
 filterwarnings = [
   "error",
+  "ignore::UserWarning:pydmd",
 ]
 log_cli_level = "INFO"
 testpaths = [
@@ -79,8 +82,8 @@ disallow_incomplete_defs = false
 check_untyped_defs = true
 strict = false
 [[tool.mypy.overrides]]
-module = ["dask_ml.decomposition.*"]
-ignore_missing_imports = true
+module = ["pydmd.*"]
+follow_untyped_imports = true
 
 [tool.ruff]
 src = ["src"]
