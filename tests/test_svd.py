@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
+from svdrom.preprocessing import hankel_preprocessing
 from svdrom.svd import TruncatedSVD
 
 
@@ -212,3 +213,39 @@ def test_reconstruct_snapshot(matrix_type):
     assert (
         "samples" in X_r.dims
     ), "Reconstructed snapshot should have dimension 'samples'."
+
+
+def test_svd_hankel():
+    """Test that SVD can be performed on a matrix after
+    Hankel pre-processing."""
+    X = make_dataarray("tall-and-skinny")
+    d = 2
+    X_d = hankel_preprocessing(X, d=d)
+    n_components = 10
+    tsvd = TruncatedSVD(n_components=n_components)
+    tsvd.fit(X_d)
+
+    assert tsvd.u.shape == (X_d.shape[0], n_components), (
+        "Expected the shape of the left singular vectors to be "
+        f"{(X_d.shape[0], n_components)}, but got {tsvd.u.shape}."
+    )
+    assert tsvd.v.shape == (n_components, X_d.shape[1]), (
+        "Expected the shape of the right singular vectors to be "
+        f"{(n_components, X_d.shape[1])}, but got {tsvd.v.shape}."
+    )
+    assert len(tsvd.s) == n_components, (
+        "Expected the length of the singular values to be "
+        f"{n_components}, but got {len(tsvd.s)}."
+    )
+    assert "delay" in tsvd.u.coords, (
+        "Expected the left singular vectors DataArray to contain "
+        "a coordinate called 'delay'."
+    )
+    np.testing.assert_equal(
+        tsvd.u.delay.values,
+        X_d.delay.values,
+        err_msg=(
+            "Expected the 'delay' coordinate of the left singular vectors "
+            "to equal the 'delay' coordinate of time input pre-processed matrix."
+        ),
+    )
