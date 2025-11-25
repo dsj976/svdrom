@@ -1,0 +1,72 @@
+from abc import ABC, abstractmethod
+from typing import Any, List
+
+import numpy as np
+import xarray as xr
+
+from svdrom.logger import setup_logger
+
+logger = setup_logger("Base", "base.log")
+
+
+class DecompositionModel(ABC):
+    """Abstract Base Class for all SVD-based Reduced Order Models.
+
+    Enforces a common interface for SVD, POD, DMD, SPOD, etc.
+    """
+
+    def __init__(self, n_components: int):
+        """
+        Parameters
+        ----------
+        n_components : int
+            The number of components/modes to keep.
+        """
+        self._n_components = n_components
+
+    @property
+    def n_components(self) -> int:
+        """Number of components/modes (read-only)."""
+        return self._n_components
+
+    @abstractmethod
+    def fit(self, *args, **kwargs) -> None:
+        """Fit the model to the data.
+
+        Parameters
+        ----------
+        *args : list
+            Variable length argument list.
+        **kwargs : dict
+            Arbitrary keyword arguments.
+        """
+        pass
+
+    @abstractmethod
+    def reconstruct(self, *args, **kwargs) -> xr.DataArray:
+        """Reconstruct the data using the fitted model.
+
+        Returns
+        -------
+        xr.DataArray
+            The reconstructed data.
+        """
+        pass
+
+    def _check_is_fitted(self, attributes: List[str]) -> None:
+        """Checks if the model is fitted by verifying the existence
+        of specific attributes.
+
+        Parameters
+        ----------
+        attributes : List[str]
+            List of attribute names to check (e.g. ['_u', '_s']).
+        """
+        for attr in attributes:
+            if not hasattr(self, attr) or getattr(self, attr) is None:
+                msg = (
+                    f"This {self.__class__.__name__} instance is not fitted yet. "
+                    "Call 'fit' with appropriate arguments before using this estimator."
+                )
+                logger.exception(msg)
+                raise RuntimeError(msg)

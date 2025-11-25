@@ -3,12 +3,13 @@ import dask.array as da
 import numpy as np
 import xarray as xr
 
+from svdrom.svdrom_base import DecompositionModel
 from svdrom.logger import setup_logger
 
 logger = setup_logger("SVD", "svd.log")
 
 
-class TruncatedSVD:
+class TruncatedSVD(DecompositionModel):
     def __init__(
         self,
         n_components: int,
@@ -83,8 +84,8 @@ class TruncatedSVD:
         function. The 'randomized' algorithm is implemented via Dask's
         `dask.array.linalg.svd_compressed` function.
         """
-
-        self._n_components = n_components
+        super().__init__(n_components=n_components) # Inherit from baseclass
+        
         self._algorithm = algorithm
         self._compute_u = compute_u
         self._compute_v = compute_v
@@ -366,7 +367,7 @@ class TruncatedSVD:
             raise ValueError(msg) from e
         return self._singular_vectors_to_dataarray(X_da_transformed, X)
 
-    def reconstruct_snapshot(
+    def reconstruct(
         self,
         snapshot: int | str,
         snapshot_dim: str = "time",
