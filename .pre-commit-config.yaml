@@ -39,3 +39,5 @@ repos:
           - xarray
           - dask
           - pydmd
+          - pandas
+          - pandas-stubs
