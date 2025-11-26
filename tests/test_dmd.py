@@ -6,6 +6,8 @@ import xarray as xr
 from make_test_data import DataGenerator, SignalGenerator
 
 from svdrom.dmd import OptDMD
+from svdrom.preprocessing import hankel_preprocessing
+from svdrom.svd import TruncatedSVD
 
 # set the dask scheduler to single-threaded
 dask.config.set(scheduler="single-threaded")
@@ -530,3 +532,30 @@ class TestOptDMDCoherentSignal(BaseTestOptDMD):
                 f"{np.round(eigs_imag, decimals=2)}."
             ),
         )
+
+
+class TestOptDMDHankelMatrix(TestOptDMDCoherentSignal):
+    """Tests for the OptDMD class using a SignalGenerator instance
+    to generate coherent spatio-temporal input data, pre-processed
+    with the Hankel pre-processor prior to SVD and DMD to apply
+    time-delay embedding.
+    """
+
+    @classmethod
+    def setup_class(cls):
+        generator = SignalGenerator()
+        generator.generate_signal(random_seed=1234)
+        cls.components = generator.components
+        X = generator.da.transpose("x", "time")
+        d = 2
+        X_d = hankel_preprocessing(X, d=d)
+        # convert to Dask-backed Xarray as TruncatedSVD currently only
+        # supports Dask arrays
+        X_d = X_d.copy(data=da.from_array(X_d.data))
+        n_components = len(cls.components) * d
+        tsvd = TruncatedSVD(n_components=n_components)
+        tsvd.fit(X_d)
+        cls.u, cls.s, cls.v = tsvd.u, tsvd.s, tsvd.v
+        cls.t = X_d.time
+        cls.optdmd = OptDMD()
+        cls.optdmd_bagging = OptDMD(num_trials=5, seed=1234)
