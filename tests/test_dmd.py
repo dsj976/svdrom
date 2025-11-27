@@ -57,6 +57,9 @@ class BaseTestOptDMD:
         assert hasattr(
             solver, "input_time_units"
         ), "OptDMD object is missing the 'input_time_units' attribute."
+        assert hasattr(
+            solver, "hankel_d"
+        ), "OptDMD object is missing the 'hankel_d' attribute."
 
     @pytest.mark.parametrize("solver", ["optdmd", "optdmd_bagging"])
     def test_fit_basic(self, solver):
@@ -107,10 +110,21 @@ class BaseTestOptDMD:
             f"Expected 't_fit' vector to have data type float, "
             f"but got {solver._t_fit.dtype.name}."
         )
-        assert solver.modes.shape == self.u.shape, (
-            f"Expected 'modes.shape' to be {self.u.shape}, "
-            f"but got {solver.modes.shape} instead."
-        )
+        if "delay" not in self.u.coords:
+            assert solver.modes.shape == self.u.shape, (
+                f"Expected 'modes.shape' to be {self.u.shape}, "
+                f"but got {solver.modes.shape} instead."
+            )
+        else:
+            # if time-delay embedding has been applied via the
+            # Hankel pre-processor
+            d = len(np.unique(self.u.delay))
+            expected_shape = (self.u.shape[0] // d, self.u.shape[1])
+            assert solver.modes.shape == expected_shape, (
+                f"For an input dataset with time-delay embedding of {d}, "
+                f"expected 'modes.shape' to be {expected_shape}, "
+                f"but got {solver.modes.shape} instead."
+            )
         assert solver.eigs.shape == (solver.modes.shape[1],), (
             f"Expected 'eigs.shape' to be {(solver.modes.shape[1],)}, "
             f"but got {solver.eigs.shape} instead."
@@ -137,6 +151,11 @@ class BaseTestOptDMD:
             assert isinstance(solver.modes_std, xr.DataArray), (
                 "Expected 'modes_std' to be xr.DataArray, "
                 f"but got {solver.modes_std} instead."
+            )
+            assert solver.modes_std.shape == solver.modes.shape, (
+                "Expected 'modes_std' and 'modes' to have the same shape, "
+                f"but got shapes {solver.modes_std.shape} and {solver.modes.shape}, "
+                "respectively."
             )
             assert isinstance(solver.eigs_std, np.ndarray), (
                 "Expected 'eigs_std' to be np.ndarray, "
