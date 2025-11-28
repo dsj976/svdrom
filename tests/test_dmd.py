@@ -345,7 +345,7 @@ class BaseTestOptDMD:
         """Test for the forecast() method."""
         solver = getattr(self, solver)
         forecast_span, dt = "10 s", "1 s"
-        expected_forecast_shape = (self.u.shape[0], 10)
+        expected_forecast_shape = (self.u.shape[0] // solver.hankel_d, 10)
         expected_forecast_dims = (self.u.dims[0], solver.time_dimension)
         _, expected_forecast_t_vector = solver._generate_forecast_time_vector(
             forecast_span=forecast_span,

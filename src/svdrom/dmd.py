@@ -118,7 +118,7 @@ class OptDMD:
         self._t_fit: np.ndarray | None = None  # internal use only
         self._is_datetime: bool = False  # internal use only
         self._dynamics: xr.DataArray | None = None
-        self._hankel_d: int | None = None
+        self._hankel_d: int = 1
 
     @property
     def n_modes(self) -> int:
@@ -207,9 +207,12 @@ class OptDMD:
         return self._dynamics
 
     @property
-    def hankel_d(self) -> int | None:
+    def hankel_d(self) -> int:
         """Hankel matrix rank if time-delay embedding has
-        been applied via Hankel pre-processing (read-only)."""
+        been applied via Hankel pre-processing (read-only).
+        Note that if time-delay embedding has not been applied,
+        this parameter will have a value of 1.
+        """
         return self._hankel_d
 
     def _check_svd_inputs(self, u: xr.DataArray, s: np.ndarray, v: xr.DataArray):
@@ -434,9 +437,27 @@ class OptDMD:
     ) -> "OptDMD":
         """Given the fitted BOPDMD instance, the left singular vectors
         containing the spatial information, and the right singular vectors
-        containing the temporal information, store them in the instance attributes."""
+        containing the temporal information, store them in the instance attributes.
+        If Hankel pre-processing (i.e. time-delay embedding) has been applied, DMD
+        modes are collapsed across time delays.
+        """
         self._solver = bopdmd
-        self._modes = u.copy(data=bopdmd.modes)  # use new data with original structure
+        modes = bopdmd.modes
+        if self._hankel_d > 1:
+            # if Hankel preprocessing has been used collapse
+            # the results across time delays
+            dim0 = u.dims[0]
+            u = u.sel(
+                {dim0: u.delay == 0}
+            )  # keep only samples associated with zero time-lag
+            u = u.drop_vars("delay")
+            modes = np.average(
+                modes.reshape(
+                    self._hankel_d, modes.shape[0] // self._hankel_d, modes.shape[1]
+                ),
+                axis=0,
+            )
+        self._modes = u.copy(data=modes)  # use new data with structure from u
         self._modes.name = "dmd_modes"
         self._eigs = bopdmd.eigs
         self._amplitudes = bopdmd.amplitudes
@@ -449,7 +470,21 @@ class OptDMD:
             logger.warning(msg)
             warnings.warn(msg, RuntimeWarning, stacklevel=2)
         if self.num_trials > 0:
-            self._modes_std = u.copy(data=bopdmd.modes_std)
+            modes_std = bopdmd.modes_std
+            if self._hankel_d > 1:
+                # if Hankel preprocessing has been used collapse
+                # the results across time-delays
+                modes_std = np.average(
+                    modes_std.reshape(
+                        self._hankel_d,
+                        modes_std.shape[0] // self._hankel_d,
+                        modes_std.shape[1],
+                    ),
+                    axis=0,
+                )
+            self._modes_std = u.copy(
+                data=modes_std
+            )  # use new data with structure from u
             self._modes_std.name = "dmd_modes_std"
             self._eigs_std = bopdmd.eigenvalues_std
             self._amplitudes_std = bopdmd.amplitudes_std
@@ -489,6 +524,8 @@ class OptDMD:
         if self._n_modes == -1:
             self._n_modes = len(s)
         u, s, v = u[:, : self._n_modes], s[: self._n_modes], v[: self._n_modes, :]
+        if "delay" in u.coords:
+            self._hankel_d = len(np.unique(u.delay.values))
 
         bopdmd = BOPDMD(
             svd_rank=self._n_modes,
