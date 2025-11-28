@@ -8,12 +8,13 @@ import xarray as xr
 from dask.utils import parse_bytes
 from pydmd import BOPDMD
 
+from svdrom.svdrom_base import DecompositionModel
 from svdrom.logger import setup_logger
 
 logger = setup_logger("DMD", "dmd.log")
 
 
-class OptDMD:
+class OptDMD(DecompositionModel):
     def __init__(
         self,
         n_modes: int = -1,
@@ -73,7 +74,8 @@ class OptDMD:
         This class is a wrapper of the `BOPDMD.fit_econ()` method, which fits
         an approximate Optimized DMD on an array X by operating on the SVD of X.
         """
-        if n_modes != -1 and n_modes < 1:
+        super().__init__(n_components=n_modes)
+        if self.n_components != -1 and self.n_components < 1:
             msg = "'n_modes' must be a positive integer or -1."
             logger.exception(msg)
             raise ValueError(msg)
