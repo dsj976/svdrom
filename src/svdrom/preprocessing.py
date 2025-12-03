@@ -207,7 +207,10 @@ def hankel_preprocessing(X: xr.DataArray, d: int = 2) -> xr.DataArray:
         dims=dims,
         coords={
             dims[0]: samples,
-            dims[1]: X[dims[1]][d - 1 :],
-            "delay": (dims[0], np.repeat(np.flip(np.arange(d)), X[dims[0]].shape[0])),
+            dims[1]: X[dims[1]][: -d + 1],
+            "lag": (dims[0], np.repeat(np.arange(d), X[dims[0]].shape[0])),
+        },
+        attrs={
+            "original_time": X.time.values,
         },
     )

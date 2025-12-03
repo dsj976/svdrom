@@ -23,8 +23,8 @@ def test_variable_spatial_stack(X: xr.DataArray | xr.Dataset):
     # check that the output is a xarray DataArray
     X_stacked = variable_spatial_stack(X, dims=("x", "y", "z"))
     assert isinstance(X_stacked, xr.DataArray), (
-        "The result of stacking should be a Xarray DataArray, ",
-        f"got {type(X_stacked).__name__}.",
+        "The result of stacking should be a Xarray DataArray, "
+        f"got {type(X_stacked).__name__}."
     )
 
     # check that the dimensions are "time" and "samples"
@@ -40,15 +40,15 @@ def test_variable_spatial_stack(X: xr.DataArray | xr.Dataset):
     if isinstance(X, xr.DataArray):
         expected_shape = (len_x * len_y * len_z, len(X.time))
         assert expected_shape == X_stacked.shape, (
-            f"Expected shape for a DataArray after stacking is {expected_shape}, ",
-            f"got {X_stacked.shape}.",
+            f"Expected shape for a DataArray after stacking is {expected_shape}, "
+            f"got {X_stacked.shape}."
         )
     if isinstance(X, xr.Dataset):
         vars = list(X.keys())
         expected_shape = (len_x * len_y * len_z * len(vars), len(X.time))
         assert expected_shape == X_stacked.shape, (
-            f"Expected shape for a Dataset after stacking is {expected_shape}, ",
-            f"got {X_stacked.shape}.",
+            f"Expected shape for a Dataset after stacking is {expected_shape}, "
+            f"got {X_stacked.shape}."
         )
 
     # check that by unstacking we can recover the original
@@ -111,7 +111,8 @@ def test_hankel_preprocessing(generator: DataGenerator | SignalGenerator, d: int
     elif isinstance(generator, SignalGenerator):
         X = generator.da.rename({"x": "samples"})
     else:
-        raise ValueError
+        msg = "Input must be an instance of DataGenerator or SignalGenerator."
+        raise ValueError(msg)
 
     X = X.transpose("samples", "time")
     n_samples, n_snapshots = X.shape
@@ -122,7 +123,7 @@ def test_hankel_preprocessing(generator: DataGenerator | SignalGenerator, d: int
     ), f"Expected dimensions are {X.dims}, but got {X_delayed.dims}."
 
     expected_coords = list(X.coords)
-    expected_coords.append("delay")
+    expected_coords.append("lag")
     actual_coords = list(X_delayed.coords)
     expected_coords, actual_coords = sorted(expected_coords), sorted(actual_coords)
     assert (
@@ -134,11 +135,34 @@ def test_hankel_preprocessing(generator: DataGenerator | SignalGenerator, d: int
         X_delayed.shape == expected_shape
     ), f"Expected shape is {expected_shape}, but got {X_delayed.shape}."
 
-    np.testing.assert_array_equal(
+    expected_lag_coord = np.repeat(np.arange(d), n_samples)
+    assert np.array_equal(X_delayed.lag.values, expected_lag_coord), (
+        f"Expected the lag coordinate to consist of {n_samples} repeats of "
+        f"{np.arange(d)}, but got something else."
+    )
+
+    expected_time_coord = X.time.values[: -d + 1]
+    assert np.array_equal(
+        X_delayed.time.values,
+        expected_time_coord,
+    ), (
+        f"Expected the time coordinate to be equal to t[:{-d+1}], "
+        "where t is the time coordinate of the original matrix."
+    )
+
+    expected_orig_time_attr = X.time.values
+    assert np.array_equal(
+        X_delayed.attrs["original_time"],
+        expected_orig_time_attr,
+    ), (
+        "Expected the original time vector to be saved as an attribute "
+        "with the name original_time."
+    )
+
+    assert np.array_equal(
         X_delayed[(d - 1) * n_samples :, 0].compute().data,
         X_delayed[:n_samples, d - 1].compute().data,
-        err_msg=(
-            "After Hankel pre-processing, expected "
-            f"X[{(d-1) * n_samples}:, 0] to equal X[:{n_samples}, {d-1}]."
-        ),
+    ), (
+        "After Hankel pre-processing, expected "
+        f"X[{(d-1) * n_samples}:, 0] to equal X[:{n_samples}, {d-1}]."
     )
