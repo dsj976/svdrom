@@ -190,6 +190,7 @@ class TruncatedSVD:
             coords = {k: v for k, v in X.coords.items() if k != old_dims[1]}
             coords["components"] = np.arange(singular_vectors.shape[1])
             name = "svd_u"
+            attrs = None
         elif singular_vectors.shape[1] == X.shape[1]:
             # this corresponds to `v`: replace first dimension (e.g. 'samples')
             old_dims = list(X.dims)
@@ -197,6 +198,11 @@ class TruncatedSVD:
             coords = {old_dims[1]: X.coords[old_dims[1]]}
             coords["components"] = np.arange(singular_vectors.shape[0])
             name = "svd_v"
+            attrs = (
+                {"original_time": X.attrs["original_time"]}
+                if "original_time" in X.attrs
+                else None
+            )
         else:
             msg = (
                 "Cannot transform singular vectors into Xarray DataArray. "
@@ -204,7 +210,13 @@ class TruncatedSVD:
             )
             logger.exception(msg)
             raise ValueError(msg)
-        return xr.DataArray(singular_vectors, dims=new_dims, coords=coords, name=name)
+        return xr.DataArray(
+            singular_vectors,
+            dims=new_dims,
+            coords=coords,
+            name=name,
+            attrs=attrs,
+        )
 
     def fit(
         self,

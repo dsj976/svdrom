@@ -237,15 +237,21 @@ def test_svd_hankel():
         "Expected the length of the singular values to be "
         f"{n_components}, but got {len(tsvd.s)}."
     )
-    assert "delay" in tsvd.u.coords, (
+    assert "lag" in tsvd.u.coords, (
         "Expected the left singular vectors DataArray to contain "
-        "a coordinate called 'delay'."
+        "a coordinate called 'lag'."
     )
-    np.testing.assert_equal(
-        tsvd.u.delay.values,
-        X_d.delay.values,
-        err_msg=(
-            "Expected the 'delay' coordinate of the left singular vectors "
-            "to equal the 'delay' coordinate of time input pre-processed matrix."
-        ),
+    assert np.array_equal(
+        tsvd.u.lag.values,
+        X_d.lag.values,
+    ), (
+        "Expected the 'lag' coordinate of the left singular vectors "
+        "to match the 'lag' coordinate of the Hankel-preprocessed data matrix."
+    )
+    assert np.array_equal(
+        tsvd.v.attrs["original_time"],
+        X_d.attrs["original_time"],
+    ), (
+        "The 'original_time' attribute in the right singular vectors and"
+        "Hankel-preprocessed data matrix should match."
     )
