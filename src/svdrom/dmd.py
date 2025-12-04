@@ -141,6 +141,37 @@ class OptDMD:
         return self._modes
 
     @property
+    def modes_averaged(self) -> xr.DataArray | None:
+        """The DMD modes, averaged across time lags if Hankel
+        pre-processing has been used (read-only). You should
+        use this attribute instead of 'modes' for visualization
+        when applying Hankel pre-processing. If Hankel pre-processing
+        has not been used it just returns the standard DMD modes.
+        """
+        if not isinstance(self._modes, xr.DataArray):
+            return None
+        if self._hankel_d == 1:
+            return self._modes
+        modes_averaged = self._modes.values
+        # split each column into 'hankel_d' equal parts and
+        # average together
+        modes_averaged = np.average(
+            modes_averaged.reshape(
+                self._hankel_d,
+                modes_averaged.shape[0] // self._hankel_d,
+                modes_averaged.shape[1],
+            ),
+            axis=0,
+        )
+        modes = self._modes
+        dim0 = modes.dims[0]
+        modes = modes.sel(
+            {dim0: modes.lag == 0}
+        )  # keep only the samples associated with the zero time-lag
+        modes = modes.drop_vars("lag")
+        return modes.copy(data=modes_averaged)
+
+    @property
     def amplitudes(self) -> np.ndarray | None:
         """The DMD amplitudes (read-only)."""
         return self._amplitudes

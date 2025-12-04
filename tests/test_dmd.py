@@ -60,6 +60,9 @@ class BaseTestOptDMD:
         assert hasattr(
             solver, "hankel_d"
         ), "OptDMD object is missing the 'hankel_d' attribute."
+        assert hasattr(
+            solver, "modes_averaged"
+        ), "OptDMD object is missing the 'modes_averaged' attribute."
 
     @pytest.mark.parametrize("solver", ["optdmd", "optdmd_bagging"])
     def test_fit_basic(self, solver):
