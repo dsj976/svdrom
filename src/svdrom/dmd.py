@@ -471,26 +471,9 @@ class OptDMD:
         """Given the fitted BOPDMD instance, the left singular vectors
         containing the spatial information, and the right singular vectors
         containing the temporal information, store them in the instance attributes.
-        If Hankel pre-processing (i.e. time-delay embedding) has been applied, DMD
-        modes are collapsed across time delays.
         """
         self._solver = bopdmd
-        modes = bopdmd.modes
-        if self._hankel_d > 1:
-            # if Hankel preprocessing has been used collapse
-            # the results across time delays
-            dim0 = u.dims[0]
-            u = u.sel(
-                {dim0: u[config.get("hankel_coord_name")] == 0}
-            )  # keep only samples associated with zero time-lag
-            u = u.drop_vars(config.get("hankel_coord_name"))
-            modes = np.average(
-                modes.reshape(
-                    self._hankel_d, modes.shape[0] // self._hankel_d, modes.shape[1]
-                ),
-                axis=0,
-            )
-        self._modes = u.copy(data=modes)  # use new data with structure from u
+        self._modes = u.copy(data=bopdmd.modes)  # use new data with structure from u
         self._modes.name = "dmd_modes"
         self._eigs = bopdmd.eigs
         self._amplitudes = bopdmd.amplitudes
@@ -503,20 +486,8 @@ class OptDMD:
             logger.warning(msg)
             warnings.warn(msg, RuntimeWarning, stacklevel=2)
         if self.num_trials > 0:
-            modes_std = bopdmd.modes_std
-            if self._hankel_d > 1:
-                # if Hankel preprocessing has been used collapse
-                # the results across time-delays
-                modes_std = np.average(
-                    modes_std.reshape(
-                        self._hankel_d,
-                        modes_std.shape[0] // self._hankel_d,
-                        modes_std.shape[1],
-                    ),
-                    axis=0,
-                )
             self._modes_std = u.copy(
-                data=modes_std
+                data=bopdmd.modes_std
             )  # use new data with structure from u
             self._modes_std.name = "dmd_modes_std"
             self._eigs_std = bopdmd.eigenvalues_std

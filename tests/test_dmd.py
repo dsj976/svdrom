@@ -5,6 +5,7 @@ import pytest
 import xarray as xr
 from make_test_data import DataGenerator, SignalGenerator
 
+import svdrom.config as config
 from svdrom.dmd import OptDMD
 from svdrom.preprocessing import hankel_preprocessing
 from svdrom.svd import TruncatedSVD
@@ -102,7 +103,7 @@ class BaseTestOptDMD:
             self.v.time.values,
             strict=True,
             err_msg=(
-                "Expected 'time_fit' vector to " "be strictly equal to 'v.time.values'."
+                "Expected 'time_fit' vector to be strictly equal to 'v.time.values'."
             ),
         )
         assert isinstance(solver._t_fit, np.ndarray), (
@@ -113,19 +114,16 @@ class BaseTestOptDMD:
             f"Expected 't_fit' vector to have data type float, "
             f"but got {solver._t_fit.dtype.name}."
         )
-        if "delay" not in self.u.coords:
-            assert solver.modes.shape == self.u.shape, (
-                f"Expected 'modes.shape' to be {self.u.shape}, "
-                f"but got {solver.modes.shape} instead."
-            )
-        else:
-            # if time-delay embedding has been applied via the
-            # Hankel pre-processor
-            d = len(np.unique(self.u.delay))
+        assert solver.modes.shape == self.u.shape, (
+            f"Expected 'modes.shape' to be {self.u.shape}, "
+            f"but got {solver.modes.shape} instead."
+        )
+        if self.hankel_preprocessing:
+            d = len(np.unique(self.u[config.get("hankel_coord_name")]))
             expected_shape = (self.u.shape[0] // d, self.u.shape[1])
-            assert solver.modes.shape == expected_shape, (
+            assert solver.modes_averaged.shape == expected_shape, (
                 f"For an input dataset with time-delay embedding of {d}, "
-                f"expected 'modes.shape' to be {expected_shape}, "
+                f"expected 'modes_averaged.shape' to be {expected_shape}, "
                 f"but got {solver.modes.shape} instead."
             )
         assert solver.eigs.shape == (solver.modes.shape[1],), (
@@ -348,7 +346,7 @@ class BaseTestOptDMD:
         """Test for the forecast() method."""
         solver = getattr(self, solver)
         forecast_span, dt = "10 s", "1 s"
-        expected_forecast_shape = (self.u.shape[0] // solver.hankel_d, 10)
+        expected_forecast_shape = (self.u.shape[0], 10)  # 10: 10s span, 1s interval
         expected_forecast_dims = (self.u.dims[0], solver.time_dimension)
         _, expected_forecast_t_vector = solver._generate_forecast_time_vector(
             forecast_span=forecast_span,
@@ -511,6 +509,7 @@ class TestOptDMDRandomData(BaseTestOptDMD):
         cls.u, cls.s, cls.v, cls.t = generator.u, generator.s, generator.v, generator.t
         cls.optdmd = OptDMD()
         cls.optdmd_bagging = OptDMD(num_trials=5, seed=1234)
+        cls.hankel_preprocessing = False
 
 
 class TestOptDMDCoherentSignal(BaseTestOptDMD):
@@ -529,6 +528,7 @@ class TestOptDMDCoherentSignal(BaseTestOptDMD):
         cls.optdmd_bagging = OptDMD(
             input_time_units="s", num_trials=10, trial_size=0.9, seed=1234
         )
+        cls.hankel_preprocessing = False
 
     @pytest.mark.parametrize("solver", ["optdmd", "optdmd_bagging"])
     def test_correct_eigs(self, solver):
@@ -571,6 +571,7 @@ class TestOptDMDHankelMatrix(TestOptDMDCoherentSignal):
         X = generator.da.transpose("x", "time")
         d = 2
         X_d = hankel_preprocessing(X, d=d)
+        cls.hankel_preprocessing = True
         # convert to Dask-backed Xarray as TruncatedSVD currently only
         # supports Dask arrays
         X_d = X_d.copy(data=da.from_array(X_d.data))
