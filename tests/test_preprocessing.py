@@ -3,6 +3,7 @@ import pytest
 import xarray as xr
 from make_test_data import DataGenerator, SignalGenerator
 
+import svdrom.config as config
 from svdrom.preprocessing import (
     StandardScaler,
     hankel_preprocessing,
@@ -16,6 +17,10 @@ data_generator.generate_dataset()
 signal_generator = SignalGenerator()
 signal_generator.add_sinusoid1()
 
+stack_coord_name = "space"
+hankel_coord_name = "delay"
+config.set(stack_coord_name=stack_coord_name, hankel_coord_name=hankel_coord_name)
+
 
 @pytest.mark.parametrize("X", [data_generator.da, data_generator.ds])
 def test_variable_spatial_stack(X: xr.DataArray | xr.Dataset):
@@ -27,15 +32,15 @@ def test_variable_spatial_stack(X: xr.DataArray | xr.Dataset):
         f"got {type(X_stacked).__name__}."
     )
 
-    # check that the dimensions are "time" and "samples"
+    # check that the dimensions are "time" and stack_coord_name
     dims = sorted(map(str, X_stacked.sizes.keys()))
-    expected_dims = sorted(["time", "samples"])
+    expected_dims = sorted(["time", stack_coord_name])
     assert (
         dims == expected_dims
     ), f"Expected dimensions after stacking are {expected_dims}, got {dims}."
 
     # check if shape matches expected shape
-    X_stacked = X_stacked.transpose("samples", "time")
+    X_stacked = X_stacked.transpose(stack_coord_name, "time")
     len_x, len_y, len_z = len(X.x), len(X.y), len(X.z)
     if isinstance(X, xr.DataArray):
         expected_shape = (len_x * len_y * len_z, len(X.time))
@@ -106,15 +111,15 @@ def test_hankel_preprocessing(generator: DataGenerator | SignalGenerator, d: int
     """Test for the hankel_preprocessing function."""
     if isinstance(generator, DataGenerator):
         X = generator.da.chunk("auto")  # convert to Dask-backed DataArray
-        # stack into single spatial dimension, called "samples"
+        # stack into single spatial dimension, called stack_coord_name
         X = variable_spatial_stack(X, dims=("x", "y", "z"))
     elif isinstance(generator, SignalGenerator):
-        X = generator.da.rename({"x": "samples"})
+        X = generator.da.rename({"x": stack_coord_name})
     else:
         msg = "Input must be an instance of DataGenerator or SignalGenerator."
         raise ValueError(msg)
 
-    X = X.transpose("samples", "time")
+    X = X.transpose(stack_coord_name, "time")
     n_samples, n_snapshots = X.shape
     X_delayed = hankel_preprocessing(X, d=d)
 
@@ -123,7 +128,7 @@ def test_hankel_preprocessing(generator: DataGenerator | SignalGenerator, d: int
     ), f"Expected dimensions are {X.dims}, but got {X_delayed.dims}."
 
     expected_coords = list(X.coords)
-    expected_coords.append("lag")
+    expected_coords.append(hankel_coord_name)
     actual_coords = list(X_delayed.coords)
     expected_coords, actual_coords = sorted(expected_coords), sorted(actual_coords)
     assert (
@@ -136,7 +141,7 @@ def test_hankel_preprocessing(generator: DataGenerator | SignalGenerator, d: int
     ), f"Expected shape is {expected_shape}, but got {X_delayed.shape}."
 
     expected_lag_coord = np.repeat(np.arange(d), n_samples)
-    assert np.array_equal(X_delayed.lag.values, expected_lag_coord), (
+    assert np.array_equal(X_delayed[hankel_coord_name].values, expected_lag_coord), (
         f"Expected the lag coordinate to consist of {n_samples} repeats of "
         f"{np.arange(d)}, but got something else."
     )
