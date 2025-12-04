@@ -8,6 +8,7 @@ import xarray as xr
 from dask.utils import parse_bytes
 from pydmd import BOPDMD
 
+import svdrom.config as config
 from svdrom.logger import setup_logger
 
 logger = setup_logger("DMD", "dmd.log")
@@ -166,9 +167,9 @@ class OptDMD:
         modes = self._modes
         dim0 = modes.dims[0]
         modes = modes.sel(
-            {dim0: modes.lag == 0}
+            {dim0: modes[config.get("hankel_coord_name")] == 0}
         )  # keep only the samples associated with the zero time-lag
-        modes = modes.drop_vars("lag")
+        modes = modes.drop_vars(config.get("hankel_coord_name"))
         return modes.copy(data=modes_averaged)
 
     @property
@@ -279,18 +280,19 @@ class OptDMD:
             logger.exception(msg)
             raise ValueError(msg)
 
-        if "delay" in u.coords:
-            if u.delay.dims[0] != u.dims[0]:
+        if config.get("hankel_coord_name") in u.coords:
+            if u[config.get("hankel_coord_name")].dims[0] != u.dims[0]:
                 msg = (
-                    "The dimension of the 'delay' coordinate should be the "
-                    "same as the first dimension of the left singular vectors 'u'."
+                    f"The dimension of the {config.get("hankel_coord_name")} "
+                    "coordinate should be the same as the first dimension of the "
+                    "left singular vectors 'u'."
                 )
                 logger.exception(msg)
                 raise ValueError(msg)
-            if np.any(np.unique(u.delay.values) < 0):
+            if np.any(np.unique(u[config.get("hankel_coord_name")].values) < 0):
                 msg = (
-                    "The 'delay' coordinate should only contain values "
-                    "greater than or equal to zero."
+                    f"The {config.get("hankel_coord_name")} coordinate should only "
+                    "contain values greater than or equal to zero."
                 )
                 logger.exception(msg)
                 raise ValueError(msg)
@@ -479,9 +481,9 @@ class OptDMD:
             # the results across time delays
             dim0 = u.dims[0]
             u = u.sel(
-                {dim0: u.delay == 0}
+                {dim0: u[config.get("hankel_coord_name")] == 0}
             )  # keep only samples associated with zero time-lag
-            u = u.drop_vars("delay")
+            u = u.drop_vars(config.get("hankel_coord_name"))
             modes = np.average(
                 modes.reshape(
                     self._hankel_d, modes.shape[0] // self._hankel_d, modes.shape[1]
@@ -555,8 +557,8 @@ class OptDMD:
         if self._n_modes == -1:
             self._n_modes = len(s)
         u, s, v = u[:, : self._n_modes], s[: self._n_modes], v[: self._n_modes, :]
-        if "delay" in u.coords:
-            self._hankel_d = len(np.unique(u.delay.values))
+        if config.get("hankel_coord_name") in u.coords:
+            self._hankel_d = len(np.unique(u[config.get("hankel_coord_name")].values))
 
         bopdmd = BOPDMD(
             svd_rank=self._n_modes,
