@@ -8,6 +8,7 @@ import xarray as xr
 from dask.array.lib.stride_tricks import sliding_window_view as sliding_window_view_dask
 from numpy.lib.stride_tricks import sliding_window_view as sliding_window_view_np
 
+import svdrom.config as config
 from svdrom.logger import setup_logger
 
 logger = setup_logger("Preprocessing", "preprocessing.log")
@@ -17,7 +18,9 @@ def variable_spatial_stack(
     X: xr.Dataset | xr.DataArray, dims: Sequence[str]
 ) -> xr.DataArray:
     """Stack multiple dimensions of an input Xarray Dataset or
-    DataArray into a single new 'samples' dimension.
+    DataArray into a single new 'samples' dimension. You can
+    change the default name of the 'samples' dimension using
+    svdrom.config.set(stack_coord_name="desired name").
 
     Parameters
     ----------
@@ -59,7 +62,7 @@ def variable_spatial_stack(
 
     msg = "Performing spatial stacking."
     logger.info(msg)
-    return X.stack(samples=dims)
+    return X.stack({config.get("stack_coord_name"): dims})
 
 
 class StandardScaler:
@@ -168,6 +171,10 @@ def hankel_preprocessing(X: xr.DataArray, d: int = 2) -> xr.DataArray:
         resulting in a matrix with dimensions ((2*m) x (n-1)). If the input
         DataArray is NumPy-backed, the returned DataArray is also NumPy-backed.
         If it is Dask-backed, then the returned DataArray is also Dask-backed.
+        The returned DataArray has a new coordinate, but default names 'lag',
+        which indicates the time delay relative to the current time stamp. You
+        can change the default name of this coordinate using
+        svdrom.config.set(hankel_coord_name="desired name").
     """
     if X.ndim != 2:
         msg = "The input array must be two dimensional."
@@ -208,7 +215,10 @@ def hankel_preprocessing(X: xr.DataArray, d: int = 2) -> xr.DataArray:
         coords={
             dims[0]: samples,
             dims[1]: X[dims[1]][: -d + 1],
-            "lag": (dims[0], np.repeat(np.arange(d), X[dims[0]].shape[0])),
+            config.get("hankel_coord_name"): (
+                dims[0],
+                np.repeat(np.arange(d), X[dims[0]].shape[0]),
+            ),
         },
         attrs={
             "original_time": X.time.values,
