@@ -3,11 +3,13 @@ import numpy as np
 import pytest
 import xarray as xr
 
+import svdrom.config as config
 from svdrom.preprocessing import hankel_preprocessing
 from svdrom.svd import TruncatedSVD
 
 samples_coord_name = "samples"
 time_coord_name = "time"
+hankel_coord_name = config.get("hankel_coord_name")
 
 
 def make_dataarray(matrix_type: str) -> xr.DataArray:
@@ -243,16 +245,17 @@ def test_svd_hankel():
         "Expected the length of the singular values to be "
         f"{n_components}, but got {len(tsvd.s)}."
     )
-    assert "lag" in tsvd.u.coords, (
+    assert hankel_coord_name in tsvd.u.coords, (
         "Expected the left singular vectors DataArray to contain "
-        "a coordinate called 'lag'."
+        f"a coordinate called {hankel_coord_name}."
     )
     assert np.array_equal(
-        tsvd.u.lag.values,
-        X_d.lag.values,
+        tsvd.u[hankel_coord_name].values,
+        X_d[hankel_coord_name].values,
     ), (
-        "Expected the 'lag' coordinate of the left singular vectors "
-        "to match the 'lag' coordinate of the Hankel-preprocessed data matrix."
+        f"Expected the {hankel_coord_name} coordinate of the left singular vectors "
+        f"to match the {hankel_coord_name} coordinate of the Hankel-preprocessed "
+        "data matrix."
     )
     assert np.array_equal(
         tsvd.v.attrs["original_time"],

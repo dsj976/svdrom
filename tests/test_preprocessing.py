@@ -17,9 +17,9 @@ data_generator.generate_dataset()
 signal_generator = SignalGenerator()
 signal_generator.add_sinusoid1()
 
+hankel_coord_name = config.get("hankel_coord_name")
 stack_coord_name = "space"
-hankel_coord_name = "delay"
-config.set(stack_coord_name=stack_coord_name, hankel_coord_name=hankel_coord_name)
+config.set(stack_coord_name=stack_coord_name)
 
 
 @pytest.mark.parametrize("X", [data_generator.da, data_generator.ds])
