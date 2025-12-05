@@ -8,6 +8,7 @@ import xarray as xr
 from dask.utils import parse_bytes
 from pydmd import BOPDMD
 
+import svdrom.config as config
 from svdrom.logger import setup_logger
 
 logger = setup_logger("DMD", "dmd.log")
@@ -118,6 +119,7 @@ class OptDMD:
         self._t_fit: np.ndarray | None = None  # internal use only
         self._is_datetime: bool = False  # internal use only
         self._dynamics: xr.DataArray | None = None
+        self._hankel_d: int = 1
 
     @property
     def n_modes(self) -> int:
@@ -140,6 +142,20 @@ class OptDMD:
         return self._modes
 
     @property
+    def modes_averaged(self) -> xr.DataArray | None:
+        """The DMD modes, averaged across time lags if Hankel
+        pre-processing has been used (read-only). You should
+        use this attribute instead of 'modes' for visualization
+        when applying Hankel pre-processing. If Hankel pre-processing
+        has not been used it just returns the standard DMD modes.
+        """
+        if not isinstance(self._modes, xr.DataArray):
+            return None
+        if self._hankel_d == 1:
+            return self._modes
+        return self._average_modes_across_lags(self._modes, self._hankel_d)
+
+    @property
     def amplitudes(self) -> np.ndarray | None:
         """The DMD amplitudes (read-only)."""
         return self._amplitudes
@@ -156,6 +172,21 @@ class OptDMD:
         """The standard deviation of the DMD modes,
         when using bagging (read-only)."""
         return self._modes_std
+
+    @property
+    def modes_std_averaged(self) -> xr.DataArray | None:
+        """The STD of the DMD modes, averaged across time lags if
+        Hankel pre-processing has been used (read-only). You should
+        use this attribute instead of 'modes_std' for visualization
+        when applying Hankel pre-processing. If Hankel pre-processing
+        has not been used it just returns the STD of the DMD modes
+        without any further processing.
+        """
+        if not isinstance(self._modes_std, xr.DataArray):
+            return None
+        if self._hankel_d == 1:
+            return self._modes_std
+        return self._average_modes_across_lags(self._modes_std, self._hankel_d)
 
     @property
     def amplitudes_std(self) -> np.ndarray | None:
@@ -205,6 +236,38 @@ class OptDMD:
         """
         return self._dynamics
 
+    @property
+    def hankel_d(self) -> int:
+        """Hankel matrix rank if time-delay embedding has
+        been applied via Hankel pre-processing (read-only).
+        Note that if time-delay embedding has not been applied,
+        this parameter will have a value of 1.
+        """
+        return self._hankel_d
+
+    @staticmethod
+    def _average_modes_across_lags(modes: xr.DataArray, hankel_d: int) -> xr.DataArray:
+        """Given a matrix of modes or modes STDs, split each column/mode
+        into hankel_d equal parts and average together, eliminating the
+        coordinate of Hankel lags.
+        """
+        modes_averaged = modes.values
+        modes_averaged = np.average(
+            modes_averaged.reshape(
+                hankel_d,
+                modes_averaged.shape[0] // hankel_d,
+                modes_averaged.shape[1],
+            ),
+            axis=0,
+        )
+        dim0 = modes.dims[0]
+        modes = modes.sel(
+            {dim0: modes[config.get("hankel_coord_name")] == 0}
+        )  # keep only the samples associated with the zero time-lag
+        modes = modes.drop_vars(config.get("hankel_coord_name"))
+        # return same DataArray structure with new data
+        return modes.copy(data=modes_averaged)
+
     def _check_svd_inputs(self, u: xr.DataArray, s: np.ndarray, v: xr.DataArray):
         """Check that the passed SVD results are valid."""
         if not isinstance(u.data, np.ndarray):
@@ -237,6 +300,23 @@ class OptDMD:
             )
             logger.exception(msg)
             raise ValueError(msg)
+
+        if config.get("hankel_coord_name") in u.coords:
+            if u[config.get("hankel_coord_name")].dims[0] != u.dims[0]:
+                msg = (
+                    f"The dimension of the {config.get("hankel_coord_name")} "
+                    "coordinate should be the same as the first dimension of the "
+                    "left singular vectors 'u'."
+                )
+                logger.exception(msg)
+                raise ValueError(msg)
+            if np.any(np.unique(u[config.get("hankel_coord_name")].values) < 0):
+                msg = (
+                    f"The {config.get("hankel_coord_name")} coordinate should only "
+                    "contain values greater than or equal to zero."
+                )
+                logger.exception(msg)
+                raise ValueError(msg)
 
     def _get_time_conversion_factor(self, from_units: str, to_units: str) -> float:
         """Get the time conversion factor from one unit of time to another.
@@ -411,9 +491,10 @@ class OptDMD:
     ) -> "OptDMD":
         """Given the fitted BOPDMD instance, the left singular vectors
         containing the spatial information, and the right singular vectors
-        containing the temporal information, store them in the instance attributes."""
+        containing the temporal information, store them in the instance attributes.
+        """
         self._solver = bopdmd
-        self._modes = u.copy(data=bopdmd.modes)  # use new data with original structure
+        self._modes = u.copy(data=bopdmd.modes)  # use new data with structure from u
         self._modes.name = "dmd_modes"
         self._eigs = bopdmd.eigs
         self._amplitudes = bopdmd.amplitudes
@@ -426,7 +507,9 @@ class OptDMD:
             logger.warning(msg)
             warnings.warn(msg, RuntimeWarning, stacklevel=2)
         if self.num_trials > 0:
-            self._modes_std = u.copy(data=bopdmd.modes_std)
+            self._modes_std = u.copy(
+                data=bopdmd.modes_std
+            )  # use new data with structure from u
             self._modes_std.name = "dmd_modes_std"
             self._eigs_std = bopdmd.eigenvalues_std
             self._amplitudes_std = bopdmd.amplitudes_std
@@ -466,6 +549,8 @@ class OptDMD:
         if self._n_modes == -1:
             self._n_modes = len(s)
         u, s, v = u[:, : self._n_modes], s[: self._n_modes], v[: self._n_modes, :]
+        if config.get("hankel_coord_name") in u.coords:
+            self._hankel_d = len(np.unique(u[config.get("hankel_coord_name")].values))
 
         bopdmd = BOPDMD(
             svd_rank=self._n_modes,

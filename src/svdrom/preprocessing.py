@@ -1,7 +1,14 @@
 from collections.abc import Sequence
+from typing import Any
 
+import dask.array as da
+import numpy as np
+import pandas as pd
 import xarray as xr
+from dask.array.lib.stride_tricks import sliding_window_view as sliding_window_view_dask
+from numpy.lib.stride_tricks import sliding_window_view as sliding_window_view_np
 
+import svdrom.config as config
 from svdrom.logger import setup_logger
 
 logger = setup_logger("Preprocessing", "preprocessing.log")
@@ -11,7 +18,9 @@ def variable_spatial_stack(
     X: xr.Dataset | xr.DataArray, dims: Sequence[str]
 ) -> xr.DataArray:
     """Stack multiple dimensions of an input Xarray Dataset or
-    DataArray into a single new 'samples' dimension.
+    DataArray into a single new 'samples' dimension. You can
+    change the default name of the 'samples' dimension using
+    svdrom.config.set(stack_coord_name="desired name").
 
     Parameters
     ----------
@@ -53,7 +62,7 @@ def variable_spatial_stack(
 
     msg = "Performing spatial stacking."
     logger.info(msg)
-    return X.stack(samples=dims)
+    return X.stack({config.get("stack_coord_name"): dims})
 
 
 class StandardScaler:
@@ -134,3 +143,84 @@ class StandardScaler:
             logger.info(msg)
             return (X - self._mean) / self._std
         return X - self._mean
+
+
+def hankel_preprocessing(X: xr.DataArray, d: int = 2) -> xr.DataArray:
+    """Hankel pre-processing.
+
+    Given a matrix with dimensions (m x n), where 'm' is the number of
+    samples (e.g. spatial observations) and 'n' is the number of snapshots
+    or temporal observations, perform time-delay embedding by appending
+    the snapshots with time-shifted versions of themselves. This can help
+    unveil hidden or latent variables from the data matrix.
+
+    Parameters
+    ----------
+    X: xr.DataArray
+        The input array, with dimensions (m x n), where 'm' is the number
+        of samples and 'n' is the number of snapshots. The DataArray can
+        be NumPy or Dask-backed.
+    d: int
+        Hankel matrix rank. Must be an integer equal to or greater than 2.
+
+    Returns
+    -------
+    xr.DataArray
+        The augmented data matrix, with dimensions ((m*d) x (n-d+1)). For
+        example, if d=2, the input array is augmented with one time-delay,
+        resulting in a matrix with dimensions ((2*m) x (n-1)). If the input
+        DataArray is NumPy-backed, the returned DataArray is also NumPy-backed.
+        If it is Dask-backed, then the returned DataArray is also Dask-backed.
+        The returned DataArray has a new coordinate, but default names 'lag',
+        which indicates the time delay relative to the current time stamp. You
+        can change the default name of this coordinate using
+        svdrom.config.set(hankel_coord_name="desired name").
+    """
+    if X.ndim != 2:
+        msg = "The input array must be two dimensional."
+        logger.exception(msg)
+        raise ValueError(msg)
+    if d < 2:
+        msg = "'d' must be an integer equal to or greater than 2."
+        logger.exception(msg)
+        raise ValueError(msg)
+    n_rows = X.shape[0]
+    if isinstance(X.data, da.Array):
+        X_delayed = (
+            sliding_window_view_dask(X.data, d, axis=1)
+            .transpose(2, 0, 1)
+            .reshape(n_rows * d, -1)
+        )
+    elif isinstance(X.data, np.ndarray):
+        X_delayed = (
+            sliding_window_view_np(X.data, d, axis=1)
+            .transpose(2, 0, 1)
+            .reshape(n_rows * d, -1)
+        )
+    else:
+        msg = "The DataArray must be backed by a NumPy or Dask Array."
+        logger.exception(msg)
+        raise ValueError(msg)
+
+    dims = X.dims
+    samples: Any = np.tile(X[dims[0]].to_numpy(), d)
+    if isinstance(X.indexes[dims[0]], pd.MultiIndex):
+        samples = pd.MultiIndex.from_tuples(
+            samples,
+            names=X.indexes[dims[0]].names,
+        )
+    return xr.DataArray(
+        X_delayed,
+        dims=dims,
+        coords={
+            dims[0]: samples,
+            dims[1]: X[dims[1]][: -d + 1],
+            config.get("hankel_coord_name"): (
+                dims[0],
+                np.repeat(np.arange(d), X[dims[0]].shape[0]),
+            ),
+        },
+        attrs={
+            "original_time": X.time.values,
+        },
+    )

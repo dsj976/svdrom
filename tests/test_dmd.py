@@ -5,7 +5,10 @@ import pytest
 import xarray as xr
 from make_test_data import DataGenerator, SignalGenerator
 
+import svdrom.config as config
 from svdrom.dmd import OptDMD
+from svdrom.preprocessing import hankel_preprocessing
+from svdrom.svd import TruncatedSVD
 
 # set the dask scheduler to single-threaded
 dask.config.set(scheduler="single-threaded")
@@ -55,15 +58,24 @@ class BaseTestOptDMD:
         assert hasattr(
             solver, "input_time_units"
         ), "OptDMD object is missing the 'input_time_units' attribute."
+        assert hasattr(
+            solver, "hankel_d"
+        ), "OptDMD object is missing the 'hankel_d' attribute."
+        assert hasattr(
+            solver, "modes_averaged"
+        ), "OptDMD object is missing the 'modes_averaged' attribute."
+        assert hasattr(
+            solver, "modes_std_averaged"
+        ), "OptDMD object is missing the 'modes_std_averaged' attribute."
 
     @pytest.mark.parametrize("solver", ["optdmd", "optdmd_bagging"])
     def test_fit_basic(self, solver):
         """Test the fit() method of the OptDMD class."""
         solver = getattr(self, solver)
         solver.fit(
-            self.generator.u,
-            self.generator.s,
-            self.generator.v,
+            self.u,
+            self.s,
+            self.v,
             varpro_opts_dict={"maxiter": 15},
             eig_sort="imag",
         )
@@ -91,10 +103,10 @@ class BaseTestOptDMD:
         )
         np.testing.assert_equal(
             solver.time_fit,
-            self.generator.v.time.values,
+            self.v.time.values,
             strict=True,
             err_msg=(
-                "Expected 'time_fit' vector to " "be strictly equal to 'v.time.values'."
+                "Expected 'time_fit' vector to be strictly equal to 'v.time.values'."
             ),
         )
         assert isinstance(solver._t_fit, np.ndarray), (
@@ -105,10 +117,18 @@ class BaseTestOptDMD:
             f"Expected 't_fit' vector to have data type float, "
             f"but got {solver._t_fit.dtype.name}."
         )
-        assert solver.modes.shape == self.generator.u.shape, (
-            f"Expected 'modes.shape' to be {self.generator.u.shape}, "
+        assert solver.modes.shape == self.u.shape, (
+            f"Expected 'modes.shape' to be {self.u.shape}, "
             f"but got {solver.modes.shape} instead."
         )
+        if self.hankel_preprocessing:
+            d = len(np.unique(self.u[config.get("hankel_coord_name")]))
+            expected_shape = (self.u.shape[0] // d, self.u.shape[1])
+            assert solver.modes_averaged.shape == expected_shape, (
+                f"For an input dataset with time-delay embedding of {d}, "
+                f"expected 'modes_averaged.shape' to be {expected_shape}, "
+                f"but got {solver.modes.shape} instead."
+            )
         assert solver.eigs.shape == (solver.modes.shape[1],), (
             f"Expected 'eigs.shape' to be {(solver.modes.shape[1],)}, "
             f"but got {solver.eigs.shape} instead."
@@ -136,6 +156,19 @@ class BaseTestOptDMD:
                 "Expected 'modes_std' to be xr.DataArray, "
                 f"but got {solver.modes_std} instead."
             )
+            assert solver.modes_std.shape == solver.modes.shape, (
+                "Expected 'modes_std' and 'modes' to have the same shape, "
+                f"but got shapes {solver.modes_std.shape} and {solver.modes.shape}, "
+                "respectively."
+            )
+            if self.hankel_preprocessing:
+                d = len(np.unique(self.u[config.get("hankel_coord_name")]))
+                expected_shape = (self.u.shape[0] // d, self.u.shape[1])
+                assert solver.modes_std_averaged.shape == expected_shape, (
+                    f"For an input dataset with time-delay embedding of {d}, "
+                    f"expected 'modes_std_averaged.shape' to be {expected_shape}, "
+                    f"but got {solver.modes.shape} instead."
+                )
             assert isinstance(solver.eigs_std, np.ndarray), (
                 "Expected 'eigs_std' to be np.ndarray, "
                 f"but got {solver.eigs_std} instead."
@@ -193,7 +226,7 @@ class BaseTestOptDMD:
             f"'t_forecast' to be {expected_delta_t}, but got "
             f"{np.unique(np.diff(t_forecast))} instead."
         )
-        if np.issubdtype(self.generator.t.dtype, float):
+        if np.issubdtype(self.t.dtype, float):
             assert np.unique(np.diff(time_forecast)) == expected_delta_t, (
                 "Expected the difference between consecutive elements in "
                 f"'time_forecast' to be {expected_delta_t}, but got "
@@ -218,7 +251,7 @@ class BaseTestOptDMD:
             f"by a value of {expected_delta_t},"
             f"but got a value of {t_forecast[0] - solver._t_fit[-1]} instead."
         )
-        if np.issubdtype(self.generator.t.dtype, float):
+        if np.issubdtype(self.t.dtype, float):
             assert time_forecast[0] == solver.time_fit[-1] + expected_delta_t, (
                 "Expected 'time_forecast[0]' to be ahead of time_fit[-1] "
                 f"by a value of {expected_delta_t}"
@@ -324,8 +357,8 @@ class BaseTestOptDMD:
         """Test for the forecast() method."""
         solver = getattr(self, solver)
         forecast_span, dt = "10 s", "1 s"
-        expected_forecast_shape = (self.generator.u.shape[0], 10)
-        expected_forecast_dims = (self.generator.u.dims[0], solver.time_dimension)
+        expected_forecast_shape = (self.u.shape[0], 10)  # 10: 10s span, 1s interval
+        expected_forecast_dims = (self.u.dims[0], solver.time_dimension)
         _, expected_forecast_t_vector = solver._generate_forecast_time_vector(
             forecast_span=forecast_span,
             dt=dt,
@@ -403,7 +436,7 @@ class BaseTestOptDMD:
         """Test for the reconstruct() method."""
         solver = getattr(self, solver)
         reconstruction = solver.reconstruct(t)
-        expected_reconstruct_dims = (self.generator.u.dims[0], solver.time_dimension)
+        expected_reconstruct_dims = (self.u.dims[0], solver.time_dimension)
         if solver.num_trials == 0:
             # no bagging
             assert isinstance(reconstruction, xr.DataArray), (
@@ -482,10 +515,12 @@ class TestOptDMDRandomData(BaseTestOptDMD):
 
     @classmethod
     def setup_class(cls):
-        cls.generator = DataGenerator(seed=1234)
-        cls.generator.generate_svd_results(n_components=10)
+        generator = DataGenerator(seed=1234)
+        generator.generate_svd_results(n_components=10)
+        cls.u, cls.s, cls.v, cls.t = generator.u, generator.s, generator.v, generator.t
         cls.optdmd = OptDMD()
         cls.optdmd_bagging = OptDMD(num_trials=5, seed=1234)
+        cls.hankel_preprocessing = False
 
 
 class TestOptDMDCoherentSignal(BaseTestOptDMD):
@@ -496,12 +531,15 @@ class TestOptDMDCoherentSignal(BaseTestOptDMD):
 
     @classmethod
     def setup_class(cls):
-        cls.generator = SignalGenerator()
-        cls.generator.generate_svd_results(random_seed=1234)
+        generator = SignalGenerator()
+        generator.generate_svd_results(random_seed=1234)
+        cls.u, cls.s, cls.v = generator.u, generator.s, generator.v
+        cls.t, cls.components = generator.t, generator.components
         cls.optdmd = OptDMD(input_time_units="s")
         cls.optdmd_bagging = OptDMD(
             input_time_units="s", num_trials=10, trial_size=0.9, seed=1234
         )
+        cls.hankel_preprocessing = False
 
     @pytest.mark.parametrize("solver", ["optdmd", "optdmd_bagging"])
     def test_correct_eigs(self, solver):
@@ -510,7 +548,7 @@ class TestOptDMDCoherentSignal(BaseTestOptDMD):
         """
         solver = getattr(self, solver)
         omegas = np.sort(
-            [component["omega"] for component in self.generator.components],
+            [component["omega"] for component in self.components],
         )[::-1]  # get the temporal frequencies of oscillation from the data generator
         eigs_imag = [
             np.abs(eig.imag) for eig in solver.eigs
@@ -527,3 +565,31 @@ class TestOptDMDCoherentSignal(BaseTestOptDMD):
                 f"{np.round(eigs_imag, decimals=2)}."
             ),
         )
+
+
+class TestOptDMDHankelMatrix(TestOptDMDCoherentSignal):
+    """Tests for the OptDMD class using a SignalGenerator instance
+    to generate coherent spatio-temporal input data, pre-processed
+    with the Hankel pre-processor prior to SVD and DMD to apply
+    time-delay embedding.
+    """
+
+    @classmethod
+    def setup_class(cls):
+        generator = SignalGenerator()
+        generator.generate_signal(random_seed=1234)
+        cls.components = generator.components
+        X = generator.da.transpose("x", "time")
+        d = 2
+        X_d = hankel_preprocessing(X, d=d)
+        cls.hankel_preprocessing = True
+        # convert to Dask-backed Xarray as TruncatedSVD currently only
+        # supports Dask arrays
+        X_d = X_d.copy(data=da.from_array(X_d.data))
+        n_components = len(cls.components) * d
+        tsvd = TruncatedSVD(n_components=n_components)
+        tsvd.fit(X_d)
+        cls.u, cls.s, cls.v = tsvd.u, tsvd.s, tsvd.v
+        cls.t = X_d.time
+        cls.optdmd = OptDMD()
+        cls.optdmd_bagging = OptDMD(num_trials=5, seed=1234)
