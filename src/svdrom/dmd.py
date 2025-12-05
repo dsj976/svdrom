@@ -153,24 +153,7 @@ class OptDMD:
             return None
         if self._hankel_d == 1:
             return self._modes
-        modes_averaged = self._modes.values
-        # split each column into 'hankel_d' equal parts and
-        # average together
-        modes_averaged = np.average(
-            modes_averaged.reshape(
-                self._hankel_d,
-                modes_averaged.shape[0] // self._hankel_d,
-                modes_averaged.shape[1],
-            ),
-            axis=0,
-        )
-        modes = self._modes
-        dim0 = modes.dims[0]
-        modes = modes.sel(
-            {dim0: modes[config.get("hankel_coord_name")] == 0}
-        )  # keep only the samples associated with the zero time-lag
-        modes = modes.drop_vars(config.get("hankel_coord_name"))
-        return modes.copy(data=modes_averaged)
+        return self._average_modes_across_lags(self._modes, self._hankel_d)
 
     @property
     def amplitudes(self) -> np.ndarray | None:
@@ -189,6 +172,21 @@ class OptDMD:
         """The standard deviation of the DMD modes,
         when using bagging (read-only)."""
         return self._modes_std
+
+    @property
+    def modes_std_averaged(self) -> xr.DataArray | None:
+        """The STD of the DMD modes, averaged across time lags if
+        Hankel pre-processing has been used (read-only). You should
+        use this attribute instead of 'modes_std' for visualization
+        when applying Hankel pre-processing. If Hankel pre-processing
+        has not been used it just returns the STD of the DMD modes
+        without any further processing.
+        """
+        if not isinstance(self._modes_std, xr.DataArray):
+            return None
+        if self._hankel_d == 1:
+            return self._modes_std
+        return self._average_modes_across_lags(self._modes_std, self._hankel_d)
 
     @property
     def amplitudes_std(self) -> np.ndarray | None:
@@ -246,6 +244,29 @@ class OptDMD:
         this parameter will have a value of 1.
         """
         return self._hankel_d
+
+    @staticmethod
+    def _average_modes_across_lags(modes: xr.DataArray, hankel_d: int) -> xr.DataArray:
+        """Given a matrix of modes or modes STDs, split each column/mode
+        into hankel_d equal parts and average together, eliminating the
+        coordinate of Hankel lags.
+        """
+        modes_averaged = modes.values
+        modes_averaged = np.average(
+            modes_averaged.reshape(
+                hankel_d,
+                modes_averaged.shape[0] // hankel_d,
+                modes_averaged.shape[1],
+            ),
+            axis=0,
+        )
+        dim0 = modes.dims[0]
+        modes = modes.sel(
+            {dim0: modes[config.get("hankel_coord_name")] == 0}
+        )  # keep only the samples associated with the zero time-lag
+        modes = modes.drop_vars(config.get("hankel_coord_name"))
+        # return same DataArray structure with new data
+        return modes.copy(data=modes_averaged)
 
     def _check_svd_inputs(self, u: xr.DataArray, s: np.ndarray, v: xr.DataArray):
         """Check that the passed SVD results are valid."""

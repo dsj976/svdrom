@@ -64,6 +64,9 @@ class BaseTestOptDMD:
         assert hasattr(
             solver, "modes_averaged"
         ), "OptDMD object is missing the 'modes_averaged' attribute."
+        assert hasattr(
+            solver, "modes_std_averaged"
+        ), "OptDMD object is missing the 'modes_std_averaged' attribute."
 
     @pytest.mark.parametrize("solver", ["optdmd", "optdmd_bagging"])
     def test_fit_basic(self, solver):
@@ -158,6 +161,14 @@ class BaseTestOptDMD:
                 f"but got shapes {solver.modes_std.shape} and {solver.modes.shape}, "
                 "respectively."
             )
+            if self.hankel_preprocessing:
+                d = len(np.unique(self.u[config.get("hankel_coord_name")]))
+                expected_shape = (self.u.shape[0] // d, self.u.shape[1])
+                assert solver.modes_std_averaged.shape == expected_shape, (
+                    f"For an input dataset with time-delay embedding of {d}, "
+                    f"expected 'modes_std_averaged.shape' to be {expected_shape}, "
+                    f"but got {solver.modes.shape} instead."
+                )
             assert isinstance(solver.eigs_std, np.ndarray), (
                 "Expected 'eigs_std' to be np.ndarray, "
                 f"but got {solver.eigs_std} instead."
